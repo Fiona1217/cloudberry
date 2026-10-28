@@ -1,0 +1,50 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Python backend
+backend/.env
+backend/.venv/
+backend/__pycache__/
+backend/*.py[cod]
+
+# Local database
+backend/cloudberry.db
+backend/cloudberry.db-*
+
+# Python environments and generated files
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Build outputs
+**/build/
+
+# Android Studio local workspace
+.idea/
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+
+# Local Android SDK configuration
+local.properties
+
+# Gradle and Kotlin generated files
+.gradle/
+.kotlin/
