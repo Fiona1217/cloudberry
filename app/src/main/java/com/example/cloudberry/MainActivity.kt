@@ -71,6 +71,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.delay
@@ -106,7 +107,8 @@ class MainActivity : ComponentActivity() {
     private var isSpotifyLoggedIn by mutableStateOf(false)
     // Held temporarily until we add the backend token exchange.
     private var authorizationCode: String? = null
-    private val backendBaseUrl = "http://10.77.208.109:8000"
+    private val backendBaseUrl = "https://cloudberry-backend.onrender.com"
+    private var backendReady by mutableStateOf(false)
     private var playlists by mutableStateOf<List<SpotifyPlaylist>>(emptyList())
     private var currentTrackName by mutableStateOf("")
     private var currentArtistName by mutableStateOf("")
@@ -144,101 +146,115 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             CloudberryTheme {
-                CloudberryHome(
-                    connectionStatus = connectionStatus,
-                    backendBaseUrl = backendBaseUrl,
-                    spotifyAccessToken = spotifyAccessToken,
-                    authStatus = authStatus,
-                    isConnecting = isConnecting,
-                    isAuthorizing = isAuthorizing,
-                    isSpotifyLoggedIn = isSpotifyLoggedIn,
-                    isSwitchingPlaylist = isSwitchingPlaylist,
-                    onLogoutSpotify = { logoutSpotify() },
-                    onLoginLogout = { handleSpotifyLoginLogout() },
-                    spotifyProfilePicture = spotifyProfilePicture,
-                    spotifyUsername = spotifyUsername,
-                    selectedPage = selectedPage,
-                    onPageSelected = { page ->
-                        selectedPage = page
-                    },
-                    currentTrackName = currentTrackName,
-                    currentArtistName = currentArtistName,
-                    currentPlaylistName = currentPlaylistName,
-                    playlistStatus = playlistStatus,
-                    albumArtwork = albumArtwork,
-                    isPlaying = isPlaying,
-                    hasCurrentTrack = hasCurrentTrack,
-                    playlists = playlists,
-                    currentPositionMs = currentPositionMs,
-                    trackDurationMs = trackDurationMs,
-                    playbackPositionUpdatedAt = playbackPositionUpdatedAt,
-                    onSeek = { position ->
-                        spotifyAppRemote?.playerApi
-                            ?.seekTo(position)
-                            ?.setErrorCallback { error ->
-                                Log.e("Cloudberry", "Failed to seek", error)
+                if (backendReady) {
+                    CloudberryHome(
+                        connectionStatus = connectionStatus,
+                        backendBaseUrl = backendBaseUrl,
+                        spotifyAccessToken = spotifyAccessToken,
+                        authStatus = authStatus,
+                        isConnecting = isConnecting,
+                        isAuthorizing = isAuthorizing,
+                        isSpotifyLoggedIn = isSpotifyLoggedIn,
+                        isSwitchingPlaylist = isSwitchingPlaylist,
+                        onLogoutSpotify = { logoutSpotify() },
+                        onLoginLogout = { handleSpotifyLoginLogout() },
+                        spotifyProfilePicture = spotifyProfilePicture,
+                        spotifyUsername = spotifyUsername,
+                        selectedPage = selectedPage,
+                        onPageSelected = { page ->
+                            selectedPage = page
+                        },
+                        currentTrackName = currentTrackName,
+                        currentArtistName = currentArtistName,
+                        currentPlaylistName = currentPlaylistName,
+                        onCurrentPlaylistNameChange = { name ->
+                            currentPlaylistName = name
+                        },
+                        playlistStatus = playlistStatus,
+                        albumArtwork = albumArtwork,
+                        isPlaying = isPlaying,
+                        hasCurrentTrack = hasCurrentTrack,
+                        playlists = playlists,
+                        currentPositionMs = currentPositionMs,
+                        trackDurationMs = trackDurationMs,
+                        playbackPositionUpdatedAt = playbackPositionUpdatedAt,
+                        onSeek = { position ->
+                            spotifyAppRemote?.playerApi
+                                ?.seekTo(position)
+                                ?.setErrorCallback { error ->
+                                    Log.e("Cloudberry", "Failed to seek", error)
+                                }
+                        },
+                        onConnectSpotify = { connectToSpotify() },
+                        onAuthorizeSpotify = { authorizePlaylistAccess() },
+
+                        onPrevious = {
+                            pendingTrackDirection = -1
+                            spotifyAppRemote?.playerApi?.skipPrevious()
+                        },
+                        onPlayPause = {
+                            val playerApi = spotifyAppRemote?.playerApi
+
+                            if (playerApi != null) {
+                                if (isPlaying) {
+                                    playerApi.pause()
+                                } else {
+                                    playerApi.resume()
+                                }
                             }
-                    },
-                    onConnectSpotify = { connectToSpotify() },
-                    onAuthorizeSpotify = { authorizePlaylistAccess() },
+                        },
+                        onNext = {
+                            pendingTrackDirection = 1
+                            spotifyAppRemote?.playerApi?.skipNext()
+                        },
+                        onQueuePlaylist = { playlist ->
+                            pendingPlaylist = playlist
 
-                    onPrevious = {
-                        pendingTrackDirection = -1
-                        spotifyAppRemote?.playerApi?.skipPrevious()
-                    },
-                    onPlayPause = {
-                        val playerApi = spotifyAppRemote?.playerApi
+                            Log.d(
+                                "Cloudberry",
+                                "Queued playlist for next track: ${playlist.name}"
+                            )
+                        },
+                        onPlayPlaylist = { playlist ->
+                            currentPlaylistName = playlist.name
+                            startPlaylistCounter(playlist)
 
-                        if (playerApi != null) {
-                            if (isPlaying) {
-                                playerApi.pause()
+                            spotifyAppRemote?.playerApi
+                                ?.play("spotify:playlist:${playlist.id}")
+                                ?.setErrorCallback { error ->
+                                    currentPlaylistName = ""
+                                    Log.e(
+                                        "Cloudberry",
+                                        "Failed to play playlist: ${playlist.name}",
+                                        error
+                                    )
+                                }
+                        },
+                        onRequestPlaylistAccess = {
+                            if (isAuthorizing) {
+                                // Authorization is already in progress.
+                            } else if (spotifyAccessToken != null) {
+                                Thread {
+                                    loadPlaylistsWithAccessToken(spotifyAccessToken!!)
+                                }.start()
                             } else {
-                                playerApi.resume()
+                                authorizePlaylistAccess()
                             }
-                        }
-                    },
-                    onNext = {
-                        pendingTrackDirection = 1
-                        spotifyAppRemote?.playerApi?.skipNext()
-                    },
-                    onQueuePlaylist = { playlist ->
-                        pendingPlaylist = playlist
-
-                        Log.d(
-                            "Cloudberry",
-                            "Queued playlist for next track: ${playlist.name}"
-                        )
-                    },
-                    onPlayPlaylist = { playlist ->
-                        currentPlaylistName = playlist.name
-                        startPlaylistCounter(playlist)
-
-                        spotifyAppRemote?.playerApi
-                            ?.play("spotify:playlist:${playlist.id}")
-                            ?.setErrorCallback { error ->
-                                currentPlaylistName = ""
-                                Log.e(
-                                    "Cloudberry",
-                                    "Failed to play playlist: ${playlist.name}",
-                                    error
-                                )
-                            }
-                    },
-                    onRequestPlaylistAccess = {
-                        if (isAuthorizing) {
-                            // Authorization is already in progress.
-                        } else if (spotifyAccessToken != null) {
-                            Thread {
-                                loadPlaylistsWithAccessToken(spotifyAccessToken!!)
-                            }.start()
-                        } else {
-                            authorizePlaylistAccess()
-                        }
-                    },
-                )
+                        },
+                    )
+                } else {
+                    ServerStartingScreen()
+                }
             }
         }
         restoreSpotifyAuthorization()
+        lifecycleScope.launch {
+            backendReady = waitForBackend()
+
+            if (backendReady) {
+                restoreSpotifyAuthorization()
+            }
+        }
     }
 
 
@@ -888,10 +904,6 @@ class MainActivity : ComponentActivity() {
                             "Playlist details error $playlistStatusCode: $playlistBody"
                         )
 
-                        runOnUiThread {
-                            currentPlaylistName = ""
-                            playlistStatus = "could not load playlist details"
-                        }
                         return@Thread
                     }
 
@@ -1257,6 +1269,7 @@ private fun CloudberryHome(
     currentTrackName: String,
     currentArtistName: String,
     currentPlaylistName: String,
+    onCurrentPlaylistNameChange: (String) -> Unit,
     playlistStatus: String,
     albumArtwork: android.graphics.Bitmap?,
     isPlaying: Boolean,
@@ -1692,10 +1705,13 @@ private fun CloudberryHome(
                         lastTriggeredRuleId = matchingRule.id
                         currentRuleName = matchingRule.name
                     } else {
+                        currentRuleName = matchingRule.name
+
+                        onCurrentPlaylistNameChange(selectedPlaylist.name)
+
                         Log.w(
                             "Cloudberry",
-                            "Matching playlist isn't currently loaded: " +
-                                    selectedPlaylist.name
+                            "Playlist '${selectedPlaylist.name}' isn't loaded in Cloudberry."
                         )
                     }
                 }
@@ -1911,6 +1927,19 @@ private fun CloudberryHome(
                         color = Color(0xFF896B52),
                         textAlign = TextAlign.Center
                     )
+
+                    if (playlistStatus.isNotBlank() &&
+                        playlistStatus != "Loading playlist..." &&
+                        playlistStatus != "nothing playing right now" &&
+                        playlistStatus != "playing outside a playlist"
+                    ) {
+                        Text(
+                            text = playlistStatus,
+                            fontSize = 12.sp,
+                            color = Color(0xFFB3261E),
+                            textAlign = TextAlign.Center
+                        )
+                    }
 
                     Text(
                         text = if (currentRuleName.isNotBlank()) {
@@ -2234,8 +2263,6 @@ private fun CloudberryHome(
                         currentTime = if (isSpotifyLoggedIn) currentTime else "",
                         onLoginLogout = onLoginLogout
                     )
-
-
                 }
 
                 else if (selectedPage == "rules") {
@@ -2243,6 +2270,9 @@ private fun CloudberryHome(
                         modifier = Modifier.weight(1f),
                         rules = if (isSpotifyLoggedIn) savedRules else emptyList(),
                         priority = rulePriority,
+                        activeRuleId = lastTriggeredRuleId,
+                        currentPlaylistName = currentPlaylistName,
+                        isPlaying = isPlaying && hasCurrentTrack,
                         onPriorityChange = { newPriority ->
                             rulePriority = newPriority
                         },
@@ -2254,7 +2284,6 @@ private fun CloudberryHome(
                             ruleBeingEdited = rule
                             onPageSelected("add playlist rule")
                         },
-
                         onDeleteRule = { ruleToRemove ->
                             val updatedRules = savedRules.filterNot {
                                 it.id == ruleToRemove.id
@@ -2398,6 +2427,45 @@ private fun matchesPlaylistRule(
         "time only" -> timeMatches
         "season and time" -> seasonMatches && timeMatches
         else -> false
+    }
+}
+
+private suspend fun waitForBackend(): Boolean {
+    val healthUrl = "https://cloudberry-backend.onrender.com/api/health"
+
+    while (true) {
+        val healthy = withContext(Dispatchers.IO) {
+            var connection: HttpURLConnection? = null
+
+            try {
+                connection = URL(healthUrl).openConnection() as HttpURLConnection
+                connection.connectTimeout = 10_000
+                connection.readTimeout = 10_000
+                connection.requestMethod = "GET"
+
+                val statusCode = connection.responseCode
+                val response = if (statusCode in 200..299) {
+                    connection.inputStream.bufferedReader().use { it.readText() }
+                } else {
+                    ""
+                }
+
+                statusCode in 200..299 &&
+                        response.contains("\"status\":\"healthy\"")
+            } catch (e: Exception) {
+                Log.d("CloudberryBackend", "Backend is not ready yet: ${e.message}")
+                false
+            } finally {
+                connection?.disconnect()
+            }
+        }
+
+        if (healthy) {
+            Log.d("CloudberryBackend", "Backend is ready")
+            return true
+        }
+
+        delay(3_000)
     }
 }
 

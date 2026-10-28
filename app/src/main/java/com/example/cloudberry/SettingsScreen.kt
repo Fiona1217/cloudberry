@@ -147,8 +147,7 @@ fun SettingsScreen(
                                 isLoggedIn -> "logged in"
                                 else -> "not logged in"
                             },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
 

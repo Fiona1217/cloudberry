@@ -55,12 +55,27 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun TimeAndPlaylistsScreen(
     modifier: Modifier = Modifier,
     rules: List<PlaylistRule>,
     priority: String,
+    activeRuleId: String?,
+    currentPlaylistName: String,
+    isPlaying: Boolean,
     onPriorityChange: (String) -> Unit,
     onAddClick: () -> Unit,
     onEditRule: (PlaylistRule) -> Unit = {},
@@ -151,10 +166,30 @@ fun TimeAndPlaylistsScreen(
             } else {
                 rules.forEach { rule ->
                     val isExpanded = rule.id in expandedRuleIds
+                    val playlistBelongsToRule = rule.playlists.any {
+                        it.name.equals(currentPlaylistName, ignoreCase = true)
+                    }
+
+                    val isActiveRule =
+                        rule.id == activeRuleId && playlistBelongsToRule
+
+                    val shouldAnimateEqualizer =
+                        isActiveRule && isPlaying
 
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(
+                                if (isActiveRule) {
+                                    Modifier.border(
+                                        width = 2.dp,
+                                        color = Color(0xFF896B52),
+                                        shape = RoundedCornerShape(14.dp)
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            )
                             .padding(bottom = 12.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(
@@ -191,7 +226,7 @@ fun TimeAndPlaylistsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Rule name and condition icons stay together.
+                                // Rule name uses remaining space; condition icons keep their size.
                                 Row(
                                     modifier = Modifier.weight(1f),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -199,16 +234,21 @@ fun TimeAndPlaylistsScreen(
                                 ) {
                                     Text(
                                         text = rule.name,
+                                        modifier = Modifier.weight(1f, fill = false),
                                         color = ruleText,
-                                        fontSize = 16.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
 
                                     Row(
+                                        modifier = Modifier,
                                         horizontalArrangement = Arrangement.spacedBy(3.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        // Keep all your existing time, season, rain,
+                                        // and equalizer icon conditions here.
                                         if (
                                             rule.triggerOption == "time only" ||
                                             rule.triggerOption == "season or time" ||
@@ -241,6 +281,13 @@ fun TimeAndPlaylistsScreen(
                                                 contentDescription = "Rain condition enabled",
                                                 modifier = Modifier.size(18.dp),
                                                 tint = ruleMuted
+                                            )
+                                        }
+
+                                        if (isActiveRule) {
+                                            PlayingEqualizer(
+                                                isPlaying = shouldAnimateEqualizer,
+                                                color = ruleMuted
                                             )
                                         }
                                     }
@@ -301,8 +348,6 @@ fun TimeAndPlaylistsScreen(
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(6.dp))
-
                                     val displayedPlaylists =
                                         if (rule.randomOrder) {
                                             rule.playlists
@@ -318,15 +363,9 @@ fun TimeAndPlaylistsScreen(
                                                 "${index + 1}. ${playlist.name}"
                                             },
                                             color = ruleText,
-                                            fontSize = 14.sp
+                                            fontSize = 10.sp
                                         )
                                     }
-
-
-                                    Spacer(modifier = Modifier.height(10.dp))
-
-
-                                    Spacer(modifier = Modifier.height(12.dp))
 
                                     when (rule.triggerOption) {
                                         "season only" -> {
@@ -340,7 +379,7 @@ fun TimeAndPlaylistsScreen(
                                             Text(
                                                 text = rule.season,
                                                 color = ruleText,
-                                                fontSize = 14.sp
+                                                fontSize = 10.sp
                                             )
                                         }
 
@@ -361,7 +400,7 @@ fun TimeAndPlaylistsScreen(
                                             )
                                         }
 
-                                        "season or time", "season and time" -> {
+                                        "season and time" -> {
                                             Text(
                                                 text = "season",
                                                 color = ruleMuted,
@@ -372,7 +411,7 @@ fun TimeAndPlaylistsScreen(
                                             Text(
                                                 text = rule.season,
                                                 color = ruleText,
-                                                fontSize = 14.sp
+                                                fontSize = 10.sp
                                             )
 
                                             Spacer(modifier = Modifier.height(8.dp))
@@ -389,12 +428,10 @@ fun TimeAndPlaylistsScreen(
                                                     "${formatRuleTime(range.first)} – ${formatRuleTime(range.second)}"
                                                 },
                                                 color = ruleText,
-                                                fontSize = 14.sp
+                                                fontSize = 10.sp
                                             )
                                         }
                                     }
-
-                                    Spacer(modifier = Modifier.height(8.dp))
 
                                     Text(
                                         text = "rain",
@@ -406,10 +443,10 @@ fun TimeAndPlaylistsScreen(
                                     Text(
                                         text = if (rule.rainEnabled) "yes" else "no",
                                         color = ruleText,
-                                        fontSize = 14.sp
+                                        fontSize = 10.sp
                                     )
 
-                                    Spacer(modifier = Modifier.height(18.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
 
 // Equal-width Edit and Delete buttons.
                                     Row(
@@ -429,7 +466,8 @@ fun TimeAndPlaylistsScreen(
                                         ) {
                                             Text(
                                                 text = "edit",
-                                                fontWeight = FontWeight.SemiBold
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 12.sp
                                             )
                                         }
 
@@ -446,7 +484,8 @@ fun TimeAndPlaylistsScreen(
                                         ) {
                                             Text(
                                                 text = "delete",
-                                                fontWeight = FontWeight.SemiBold
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 12.sp
                                             )
                                         }
                                     }
@@ -473,7 +512,7 @@ fun TimeAndPlaylistsScreen(
                 },
                 text = {
                     Text(
-                        text = "Are you sure you want to delete \"${rule.name}\"? This action cannot be undone.",
+                        text = "are you sure you want to delete \"${rule.name}\"? This action cannot be undone.",
                         color = ruleMuted
                     )
                 },
@@ -675,6 +714,101 @@ private fun vibrateDevice(context: Context) {
         } else {
             @Suppress("DEPRECATION")
             vibrator.vibrate(150)
+        }
+    }
+}
+
+@Composable
+private fun PlayingEqualizer(
+    isPlaying: Boolean,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    val bar1: Float
+    val bar2: Float
+    val bar3: Float
+
+    if (isPlaying) {
+        val transition = rememberInfiniteTransition(
+            label = "rule equalizer"
+        )
+
+        val animatedBar1 by transition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = keyframes {
+                    durationMillis = 500
+                    0.3f at 0
+                    1f at 180
+                    0.45f at 350
+                    0.3f at 500
+                },
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "equalizer bar 1"
+        )
+
+        val animatedBar2 by transition.animateFloat(
+            initialValue = 0.8f,
+            targetValue = 0.25f,
+            animationSpec = infiniteRepeatable(
+                animation = keyframes {
+                    durationMillis = 420
+                    0.8f at 0
+                    0.25f at 150
+                    1f at 300
+                    0.8f at 420
+                },
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "equalizer bar 2"
+        )
+
+        val animatedBar3 by transition.animateFloat(
+            initialValue = 0.5f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = keyframes {
+                    durationMillis = 600
+                    0.5f at 0
+                    1f at 220
+                    0.3f at 420
+                    0.5f at 600
+                },
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "equalizer bar 3"
+        )
+
+        bar1 = animatedBar1
+        bar2 = animatedBar2
+        bar3 = animatedBar3
+    } else {
+        bar1 = 0.3f
+        bar2 = 0.3f
+        bar3 = 0.3f
+    }
+
+    Canvas(modifier = modifier.size(width = 20.dp, height = 20.dp)) {
+        val barWidth = size.width / 5f
+        val gap = barWidth
+        val heights = listOf(bar1, bar2, bar3)
+
+        heights.forEachIndexed { index, fraction ->
+            val height = size.height * (
+                    if (isPlaying) fraction else 0.3f
+                    )
+
+            val x = index * (barWidth + gap) + barWidth / 2f
+
+            drawLine(
+                color = color,
+                start = Offset(x, (size.height - height) / 2f),
+                end = Offset(x, (size.height + height) / 2f),
+                strokeWidth = barWidth,
+                cap = StrokeCap.Round
+            )
         }
     }
 }
