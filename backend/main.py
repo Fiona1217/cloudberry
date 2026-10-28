@@ -1,7 +1,9 @@
 import os
 import json
-import sqlite3
 from typing import Any
+
+import psycopg
+from psycopg.rows import dict_row
 
 import httpx
 from pydantic import BaseModel
@@ -22,25 +24,17 @@ WEATHER_API_URL = "https://api.weatherapi.com/v1/current.json"
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
-DATABASE_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "cloudberry.db",
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
+def get_database_connection():
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not configured.")
 
-def initialize_database():
-    with sqlite3.connect(DATABASE_PATH) as connection:
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS account_rules (
-                spotify_user_id TEXT PRIMARY KEY,
-                rules_json TEXT NOT NULL DEFAULT '[]',
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        connection.commit()
-
-
-initialize_database()
+    return psycopg.connect(
+        DATABASE_URL,
+        row_factory=dict_row,
+        connect_timeout=10,
+    )
 
 
 async def get_spotify_user_id(
@@ -282,20 +276,29 @@ async def get_rules(
     authorization = f"Bearer {credentials.credentials}"
     spotify_user_id = await get_spotify_user_id(authorization)
 
-    with sqlite3.connect(DATABASE_PATH) as connection:
-        row = connection.execute(
-            """
-            SELECT rules_json
-            FROM account_rules
-            WHERE spotify_user_id = ?
-            """,
-            (spotify_user_id,),
-        ).fetchone()
+    try:
+        with get_database_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT rules_json
+                    FROM public.account_rules
+                    WHERE spotify_user_id = %s
+                    """,
+                    (spotify_user_id,),
+                )
+                row = cursor.fetchone()
 
-    if row is None:
-        return {"rules": []}
+        if row is None:
+            return {"rules": []}
 
-    return {"rules": json.loads(row[0])}
+        return {"rules": json.loads(row["rules_json"])}
+
+    except psycopg.Error as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not load saved rules.",
+        ) from exc
 
 
 @app.put("/api/rules")
@@ -327,23 +330,30 @@ async def save_rules(
 
     rules_json = json.dumps(rules)
 
-    with sqlite3.connect(DATABASE_PATH) as connection:
-        connection.execute(
-            """
-            INSERT INTO account_rules (
-                spotify_user_id,
-                rules_json,
-                updated_at
-            )
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(spotify_user_id)
-            DO UPDATE SET
-                rules_json = excluded.rules_json,
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            (spotify_user_id, rules_json),
-        )
-        connection.commit()
+    try:
+        with get_database_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO public.account_rules (
+                        spotify_user_id,
+                        rules_json,
+                        updated_at
+                    )
+                    VALUES (%s, %s, CURRENT_TIMESTAMP::text)
+                    ON CONFLICT (spotify_user_id)
+                    DO UPDATE SET
+                        rules_json = EXCLUDED.rules_json,
+                        updated_at = CURRENT_TIMESTAMP::text
+                    """,
+                    (spotify_user_id, rules_json),
+                )
+
+    except psycopg.Error as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save rules.",
+        ) from exc
 
     return {
         "status": "saved",
