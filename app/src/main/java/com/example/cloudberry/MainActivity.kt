@@ -2058,7 +2058,7 @@ private fun CloudberryHome(
             } ?: matchingRules.firstOrNull()
             if (matchingRule == null) {
                 lastTriggeredRuleId = null
-                currentRuleName = "-"
+                currentRuleName = "no matching rule"
                 onSetRulePlaylistSequence(emptyList())
             } else if (lastTriggeredRuleId != matchingRule.id) {
                 val orderedPlaylists = matchingRule.playlistOrder
@@ -2359,7 +2359,9 @@ private fun CloudberryHome(
                                 it.name.equals(currentPlaylistName, ignoreCase = true)
                             } == true
 
-                            if (playlistBelongsToRule) {
+                            if (currentRuleName == "no matching rule") {
+                                "rule: no matching rule"
+                            } else if (playlistBelongsToRule) {
                                 "rule: $currentRuleName"
                             } else {
                                 "rule: $currentRuleName (not applied)"
@@ -2891,18 +2893,23 @@ private fun matchesPlaylistRule(
     currentTime: Calendar,
     isRaining: Boolean
 ): Boolean {
-    // Rain is an additional requirement for a rule.
+
+    // When it is raining, non-rain rules must never match.
+    if (isRaining && !rule.rainEnabled) {
+        return false
+    }
+
+    // Rain-enabled rules only match when it is raining.
     if (rule.rainEnabled) {
         if (!isRaining) {
             return false
         }
 
-        // Season-scoped rain only applies when the rule has a season.
-        if (
-            rule.rainScope.equals("season", ignoreCase = true) &&
-            rule.season.isBlank()
-        ) {
-            return false
+        // Season-scoped rain requires a valid matching season.
+        if (rule.rainScope.equals("season", ignoreCase = true)) {
+            if (rule.season.isBlank()) {
+                return false
+            }
         }
     }
 
