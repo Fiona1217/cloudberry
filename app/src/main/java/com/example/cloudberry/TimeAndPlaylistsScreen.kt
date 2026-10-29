@@ -79,7 +79,10 @@ fun TimeAndPlaylistsScreen(
     onPriorityChange: (String) -> Unit,
     onAddClick: () -> Unit,
     onEditRule: (PlaylistRule) -> Unit = {},
-    onDeleteRule: (PlaylistRule) -> Unit = {}
+    onDeleteRule: (PlaylistRule) -> Unit = {},
+    onRuleEdited: () -> Unit = {},
+    showRestartDialog: Boolean,
+    onDismissRestartDialog: () -> Unit
 ) {
     val ruleText = Color(0xFF49382D)
     val ruleMuted = Color(0xFF896B52)
@@ -109,11 +112,28 @@ fun TimeAndPlaylistsScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Equalizer on the left of the priority button.
+            // Animate the equalizer only when a rule is actively playing.
+            if (activeRuleId != null) {
+                PlayingEqualizer(
+                    isPlaying = isPlaying && rules.any { rule ->
+                        rule.id == activeRuleId &&
+                                rule.playlists.any {
+                                    it.name.equals(currentPlaylistName, ignoreCase = true)
+                                }
+                    },
+                    color = ruleMuted,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
             OutlinedButton(
                 onClick = {
                     showPriorityDialog = true
@@ -179,19 +199,16 @@ fun TimeAndPlaylistsScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .then(
-                                if (isActiveRule) {
-                                    Modifier.border(
-                                        width = 2.dp,
-                                        color = Color(0xFF896B52),
-                                        shape = RoundedCornerShape(14.dp)
-                                    )
-                                } else {
-                                    Modifier
-                                }
-                            )
                             .padding(bottom = 12.dp),
                         shape = RoundedCornerShape(14.dp),
+                        border = if (isActiveRule) {
+                            BorderStroke(
+                                width = 2.dp,
+                                color = Color(0xFF896B52)
+                            )
+                        } else {
+                            null
+                        },
                         colors = CardDefaults.cardColors(
                             containerColor = ruleBackground
                         ),
@@ -281,13 +298,6 @@ fun TimeAndPlaylistsScreen(
                                                 contentDescription = "Rain condition enabled",
                                                 modifier = Modifier.size(18.dp),
                                                 tint = ruleMuted
-                                            )
-                                        }
-
-                                        if (isActiveRule) {
-                                            PlayingEqualizer(
-                                                isPlaying = shouldAnimateEqualizer,
-                                                color = ruleMuted
                                             )
                                         }
                                     }
@@ -396,7 +406,7 @@ fun TimeAndPlaylistsScreen(
                                                     "${formatRuleTime(range.first)} – ${formatRuleTime(range.second)}"
                                                 },
                                                 color = ruleText,
-                                                fontSize = 14.sp
+                                                fontSize = 10.sp
                                             )
                                         }
 
@@ -551,6 +561,33 @@ fun TimeAndPlaylistsScreen(
                 containerColor = ruleBackground
             )
         }
+    }
+
+    if (showRestartDialog) {
+        AlertDialog(
+            onDismissRequest = onDismissRestartDialog,
+            containerColor = ruleBackground,
+            title = {
+                Text(
+                    text = "rule updated successfully",
+                    color = ruleText,
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
+            text = {
+                Text(
+                    text = "restart cloudberry for the changes to take effect.",
+                    color = ruleMuted
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = onDismissRestartDialog
+                ) {
+                    Text("close", color = ruleText)
+                }
+            }
+        )
     }
 
     if (showPriorityDialog) {

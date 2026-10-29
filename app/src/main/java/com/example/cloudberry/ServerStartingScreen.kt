@@ -66,7 +66,7 @@ fun ServerStartingScreen() {
         }
 
         Text(
-            text = "loading." + ".".repeat(dotCount),
+            text = "loading" + ".".repeat(dotCount),
             fontSize = 12.sp,
             color = Color.Black
         )
