@@ -616,7 +616,7 @@ fun TimeAndPlaylistsScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "When a time-only rule and a season-only rule match at the same time, the time-only rule is chosen.",
+                            text = "when a time-only rule and a season-only rule match at the same time, the time-only rule is chosen.",
                             color = ruleMuted
                         )
 
@@ -632,7 +632,7 @@ fun TimeAndPlaylistsScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "If your morning playlist is scheduled for 8:00–10:00 and a winter playlist is active, the morning playlist wins during that overlap.",
+                            text = "if your morning playlist is scheduled for 8:00–10:00 and a winter playlist is active, the morning playlist wins during that overlap.",
                             color = ruleMuted
                         )
                     } else {
@@ -646,7 +646,7 @@ fun TimeAndPlaylistsScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "When a season-only rule and a time-only rule match at the same time, the season-only rule is chosen.",
+                            text = "when a season-only rule and a time-only rule match at the same time, the season-only rule is chosen.",
                             color = ruleMuted
                         )
 
@@ -662,7 +662,7 @@ fun TimeAndPlaylistsScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "If a winter playlist is active while your morning playlist is scheduled for 8:00–10:00, the winter playlist wins during that overlap.",
+                            text = "if a winter playlist is active while your morning playlist is scheduled for 8:00–10:00, the winter playlist wins during that overlap.",
                             color = ruleMuted
                         )
                     }
@@ -679,7 +679,7 @@ fun TimeAndPlaylistsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "Rules that match both the season and time always take priority over rules that match only one condition.",
+                        text = "rules that match both the season and time always take priority over rules that match only one condition.",
                         color = ruleMuted
                     )
                 }

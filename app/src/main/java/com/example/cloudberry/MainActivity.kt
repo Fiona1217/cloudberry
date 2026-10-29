@@ -1745,6 +1745,23 @@ private fun CloudberryHome(
         mutableStateOf(false)
     }
 
+    var showSpotifyLoginDialog by remember {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(isSpotifyLoggedIn) {
+        if (!isSpotifyLoggedIn) {
+            kotlinx.coroutines.delay(1000L)
+
+            // Check again after the delay
+            if (!isSpotifyLoggedIn) {
+                showSpotifyLoginDialog = true
+            }
+        } else {
+            showSpotifyLoginDialog = false
+        }
+    }
+
     LaunchedEffect(Unit) {
         while (true) {
             val now = Calendar.getInstance()
@@ -2180,7 +2197,7 @@ private fun CloudberryHome(
                 )
 
                 Text(
-                    text = "your music, your time",
+                    text = "your music, your time ‧₊ ♪˚⊹",
                     fontSize = 13.sp,
                     color = Color(0xFF8C7868),
                     modifier = Modifier.padding(
@@ -2207,10 +2224,17 @@ private fun CloudberryHome(
                         },
                         selected = selectedPage == page,
                         onClick = {
-                            onPageSelected(page)
-
                             scope.launch {
                                 drawerState.close()
+                            }
+
+                            if (
+                                (page == "home" || page == "rules" || page == "add playlist rule") &&
+                                !isSpotifyLoggedIn
+                            ) {
+                                showSpotifyLoginDialog = true
+                            } else {
+                                onPageSelected(page)
                             }
                         },
                         shape = RectangleShape,
@@ -2316,7 +2340,7 @@ private fun CloudberryHome(
                                 "from: $currentPlaylistName"
 
                             else ->
-                                "from: connect to spotify"
+                                "from: playing outside playlist"
                         },
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
@@ -2815,6 +2839,36 @@ private fun CloudberryHome(
                     )
                 }
             }
+        }
+
+        if (showSpotifyLoginDialog) {
+            AlertDialog(
+                onDismissRequest = {},
+                title = {
+                    Text("spotify login required")
+                },
+                text = {
+                    Text(
+                        "please log in to spotify before using the app. make sure you have spotify premium for the app to work properly ^-^"
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showSpotifyLoginDialog = false
+                            onLoginLogout()
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = Color(0xFF896B52)
+                        )
+                    ) {
+                        Text("login")
+                    }
+                },
+                containerColor = Color(0xFFFFFBF5),
+                titleContentColor = Color(0xFF49382D),
+                textContentColor = Color(0xFF896B52)
+            )
         }
     }
 }

@@ -506,7 +506,7 @@ fun AddPlaylistRuleScreen(
         Spacer(modifier = Modifier.height(25.dp))
 
         Text(
-            text = "trigger options",
+            text = "condition options",
             modifier = Modifier.fillMaxWidth(),
             color = RuleMuted,
             fontSize = 16.sp,
@@ -807,23 +807,17 @@ fun AddPlaylistRuleScreen(
                             hasSameRuleConditions(existing, candidateRule)
                 }
 
-                val duplicateMessages = buildList {
-                    if (duplicateNameRule != null) {
-                        add(
-                            "Name conflicts with \"${duplicateNameRule.name}\"."
-                        )
-                    }
+                val duplicateMessage = when {
+                    duplicateNameRule != null ->
+                        "rule name conflicts with \"${duplicateNameRule.name}\"."
 
-                    if (duplicateConditionsRule != null) {
-                        add(
-                            "Conditions duplicate \"${duplicateConditionsRule.name}\"."
-                        )
-                    }
+                    duplicateConditionsRule != null ->
+                        "conditions duplicate \"${duplicateConditionsRule.name}\"."
+
+                    else -> null
                 }
 
-                val message = basicMessage
-                    ?: duplicateMessages.takeIf { it.isNotEmpty() }
-                        ?.joinToString(separator = "\n")
+                val message = basicMessage ?: duplicateMessage
 
                 validationMessage = message
 
