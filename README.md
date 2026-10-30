@@ -186,6 +186,16 @@ Register the appropriate signing certificate SHA-1 fingerprints for your debug a
 
 The Spotify Client Secret must remain on the backend and must never be included in the Android application.
 
+### Spotify App Remote SDK
+
+The Spotify App Remote SDK is not included in this repository. It must be obtained separately from Spotify in accordance with Spotify's developer terms.
+
+After obtaining the SDK, place the App Remote AAR file at:
+
+`app/libs/spotify-app-remote-release-0.8.0.aar`
+
+The project uses this local file as a Gradle dependency. The SDK binary is excluded from Git and must not be redistributed through this repository.
+
 ## Environment Variables
 
 | Variable | Purpose |
