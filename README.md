@@ -1,8 +1,8 @@
-# Cloudberry
+# cloudberry
 
-Cloudberry is a personal Android application that combines **Spotify playback, customizable time-based playlist rules, and real-time weather data** to create a more dynamic music-listening experience.
+cloudberry is a personal Android application that combines **Spotify playback, customizable time-based playlist rules, and real-time weather data** to create a more dynamic music-listening experience.
 
-By integrating the Spotify Web API, Spotify Android SDK, and WeatherAPI, Cloudberry lets users organize their music around their daily schedules and weather conditions.
+By integrating the Spotify Web API, Spotify Android SDK, and WeatherAPI, cloudberry lets users organize their music around their daily schedules and weather conditions.
 
 ## Features
 
@@ -43,7 +43,7 @@ By integrating the Spotify Web API, Spotify Android SDK, and WeatherAPI, Cloudbe
 
 ## Backend API
 
-Cloudberry uses a FastAPI backend to handle weather requests, Spotify authentication, token management, and persistent rule storage.
+cloudberry uses a FastAPI backend to handle weather requests, Spotify authentication, token management, and persistent rule storage.
 
 | Endpoint | Method | Description |
 |---|---|---|
@@ -59,7 +59,7 @@ The rules endpoints require a valid Spotify access token. The backend verifies t
 
 ### Database
 
-Cloudberry uses Supabase PostgreSQL to persist user-specific playlist rules.
+cloudberry uses Supabase PostgreSQL to persist user-specific playlist rules.
 
 The backend uses the `public.account_rules` table:
 
@@ -112,7 +112,7 @@ cloudberry/
 - Python 3
 - A Spotify Developer account
 - A WeatherAPI account
-- - A Supabase project with PostgreSQL
+- A Supabase project with PostgreSQL
 
 ## Backend Setup
 
