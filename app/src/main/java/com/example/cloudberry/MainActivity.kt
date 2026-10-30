@@ -74,6 +74,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.text.SpanStyle
@@ -176,7 +177,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         SpotifyAppRemote.setDebugMode(true)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            )
+        )
 
         setContent {
             CloudberryTheme {
@@ -557,8 +567,23 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
+
     private fun restoreSpotifyAuthorization() {
-        val refreshToken = SpotifyTokenStorage(this).getRefreshToken()
+        val tokenStorage = try {
+            SpotifyTokenStorage(applicationContext)
+        } catch (error: Exception) {
+            Log.e("Cloudberry", "Could not initialize Spotify token storage", error)
+            authStatus = "Spotify storage error. Please try again."
+            return
+        }
+
+        val refreshToken = try {
+            tokenStorage.getRefreshToken()
+        } catch (error: Exception) {
+            Log.e("Cloudberry", "Could not read Spotify refresh token", error)
+            authStatus = "Could not read Spotify credentials. Please log in again."
+            return
+        }
 
         if (refreshToken.isNullOrBlank()) {
             authStatus = "Please authorize Spotify playlist access."
@@ -569,62 +594,94 @@ class MainActivity : ComponentActivity() {
 
         Thread {
             try {
-                val connection = URL("$backendBaseUrl/api/spotify/refresh").openConnection() as HttpURLConnection
+                val connection = URL(
+                    "$backendBaseUrl/api/spotify/refresh"
+                ).openConnection() as HttpURLConnection
 
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 15000
-                connection.readTimeout = 15000
-                connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/json")
+                val status: Int
+                val responseBody: String
 
-                val body = JSONObject().put("refresh_token", refreshToken).toString()
-
-                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-
-                val status = connection.responseCode
-                val responseBody = (
-                    if (status in 200..299) {
-                        connection.inputStream
-                    } else {
-                        connection.errorStream
-                    }
-                    )?.bufferedReader()?.use { it.readText() }.orEmpty()
-
-                connection.disconnect()
-
-                if (status !in 200..299) {
-                    throw IllegalStateException(
-                        "Token refresh failed ($status): $responseBody"
+                try {
+                    connection.requestMethod = "POST"
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 15000
+                    connection.doOutput = true
+                    connection.setRequestProperty(
+                        "Content-Type",
+                        "application/json"
                     )
+
+                    val body = JSONObject().put("refresh_token", refreshToken).toString()
+
+                    connection.outputStream.use {
+                        it.write(body.toByteArray(Charsets.UTF_8))
+                    }
+
+                    status = connection.responseCode
+
+                    responseBody = (
+                            if (status in 200..299) {
+                                connection.inputStream
+                            } else {
+                                connection.errorStream
+                            }
+                            )?.bufferedReader()?.use {
+                            it.readText()
+                        }.orEmpty()
+
+                } finally {
+                    connection.disconnect()
                 }
 
-                val tokenJson = JSONObject(responseBody)
-                val accessToken = tokenJson.getString("access_token")
-                runOnUiThread {
-                    spotifyAccessToken = accessToken
-                    isSpotifyLoggedIn = true
-                    loadSpotifyProfilePicture(accessToken)
-                    authStatus = "Playlist access authorized"
+                if (status !in 200..299) {
+                    val oauthError = try {
+                        JSONObject(responseBody).optString("error")
+                    } catch (_: Exception) {
+                        ""
+                    }
+
+                    if (oauthError == "invalid_grant") {
+                        tokenStorage.clearTokens()
+
+                        runOnUiThread {
+                            spotifyAccessToken = ""
+                            isSpotifyLoggedIn = false
+                            authStatus = "Your Spotify session expired. Please authorize Spotify again."
+                        }
+
+                    } else {
+                        throw IllegalStateException(
+                            "Token refresh failed ($status): $responseBody"
+                        )
+                    }
+
+                } else {
+                    val tokenJson = JSONObject(responseBody)
+                    val accessToken = tokenJson.getString("access_token")
+                    val newRefreshToken = tokenJson.optString("refresh_token")
+
+                    if (newRefreshToken.isNotBlank()) {
+                        tokenStorage.saveRefreshToken(newRefreshToken)
+                    }
+
                     runOnUiThread {
+                        spotifyAccessToken = accessToken
+                        isSpotifyLoggedIn = true
+                        loadSpotifyProfilePicture(accessToken)
+                        authStatus = "Playlist access authorized"
+
                         if (spotifyAppRemote == null && !isConnecting) {
                             connectToSpotify()
                         }
                     }
+                    loadPlaylistsWithAccessToken(accessToken)
                 }
-
-                val newRefreshToken = tokenJson.optString("refresh_token")
-                if (newRefreshToken.isNotBlank()) {
-                    SpotifyTokenStorage(this).saveRefreshToken(newRefreshToken)
-                }
-
-                loadPlaylistsWithAccessToken(accessToken)
 
             } catch (error: Exception) {
                 Log.e("Cloudberry", "Could not restore Spotify authorization", error)
 
                 runOnUiThread {
-                    authStatus =
-                        "Could not restore Spotify access: ${error.message ?: "Unknown error"}"
+                    authStatus = "Could not restore Spotify access: ${error.message ?: "Unknown error"}"
                 }
             }
         }.start()
