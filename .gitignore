@@ -49,4 +49,7 @@ local.properties
 .gradle/
 .kotlin/
 
+# Spotify SDK binaries (keep local; do not redistribute)
+app/libs/*.aar
+
 /app/release/
