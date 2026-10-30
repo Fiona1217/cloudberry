@@ -8,6 +8,7 @@ By integrating the Spotify Web API, Spotify Android SDK, and WeatherAPI, Cloudbe
 
 - **Spotify integration** — Connect your Spotify account and access your playlists.
 - **Time-based playlist rules** — Create custom time periods and assign Spotify playlists to them.
+- **Season-based playlist rules** — Assign playlists to specific seasons and combine seasonal conditions with time-based rules.
 - **Weather integration** — Retrieve current weather conditions using WeatherAPI.
 - **Weather-based playlist rules** — Configure music rules that respond to weather conditions, including rain.
 - **Playback controls** — Control Spotify playback through the app.
@@ -111,7 +112,7 @@ cloudberry/
 - Python 3
 - A Spotify Developer account
 - A WeatherAPI account
-- A PostgreSQL database
+- - A Supabase project with PostgreSQL
 
 ## Backend Setup
 
