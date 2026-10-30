@@ -48,3 +48,5 @@ local.properties
 # Gradle and Kotlin generated files
 .gradle/
 .kotlin/
+
+/app/release/
