@@ -339,11 +339,15 @@ fun SettingsScreen(
             title = {
                 Text(
                     text = "log out of spotify?",
+                    color = AppColors.TextBrown,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
-                Text("are you sure you want to log out of your spotify account?")
+                Text(
+                    text = "are you sure you want to log out of your spotify account?",
+                    color = AppColors.TextBrown
+                )
             },
             confirmButton = {
                 Button(
@@ -366,7 +370,10 @@ fun SettingsScreen(
                 OutlinedButton(
                     onClick = { showLogoutDialog = false }
                 ) {
-                    Text("cancel")
+                    Text(
+                        text = "cancel",
+                        color = AppColors.TextBrown
+                    )
                 }
             }
         )
