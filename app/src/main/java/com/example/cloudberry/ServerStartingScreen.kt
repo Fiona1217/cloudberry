@@ -1,11 +1,7 @@
 
 package com.example.cloudberry
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,18 +25,6 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun ServerStartingScreen() {
-    val transition = rememberInfiniteTransition(label = "loading")
-
-    val alpha by transition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "loadingDots"
-    )
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -68,7 +52,7 @@ fun ServerStartingScreen() {
         Text(
             text = "loading" + ".".repeat(dotCount),
             fontSize = 12.sp,
-            color = Color.Black
+            color = AppColors.TextBrown
         )
     }
 }

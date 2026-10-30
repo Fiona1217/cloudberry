@@ -1,7 +1,6 @@
 package com.example.cloudberry
 
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -31,58 +30,41 @@ private data class StoredRule(
     val timeRanges: List<StoredTimeRange> = emptyList()
 )
 
-
 class RuleStorage {
     private val gson = Gson()
-
     private fun SpotifyPlaylist.toStoredPlaylist() =
         StoredPlaylist(
             id = id,
             name = name,
             imageUrl = imageUrl
         )
-
     private fun StoredPlaylist.toPlaylist() =
         SpotifyPlaylist(
             id = id,
             name = name,
             imageUrl = imageUrl
         )
-
-    suspend fun loadRulesFromBackend(
-        accessToken: String,
-        backendBaseUrl: String
-    ): List<PlaylistRule> = withContext(Dispatchers.IO) {
-        val connection = URL("$backendBaseUrl/api/rules")
-            .openConnection() as HttpURLConnection
+    suspend fun loadRulesFromBackend(accessToken: String, backendBaseUrl: String): List<PlaylistRule> = withContext(Dispatchers.IO) {
+        val connection = URL("$backendBaseUrl/api/rules").openConnection() as HttpURLConnection
 
         try {
             connection.requestMethod = "GET"
-            connection.setRequestProperty(
-                "Authorization",
-                "Bearer $accessToken"
-            )
+            connection.setRequestProperty("Authorization", "Bearer $accessToken")
             connection.connectTimeout = 15000
             connection.readTimeout = 15000
 
             val status = connection.responseCode
             val response = (
-                    if (status in 200..299) connection.inputStream
-                    else connection.errorStream
+                if (status in 200..299) connection.inputStream
+                else connection.errorStream
                     )?.bufferedReader()?.use { it.readText() }.orEmpty()
 
             if (status !in 200..299) {
                 throw Exception("Loading rules failed: HTTP $status — $response")
             }
 
-            val responseObject = gson.fromJson(
-                response,
-                com.google.gson.JsonObject::class.java
-            )
-
-            val rulesJson = responseObject.getAsJsonArray("rules")
-                ?: throw Exception("Backend response is missing 'rules'")
-
+            val responseObject = gson.fromJson(response, com.google.gson.JsonObject::class.java)
+            val rulesJson = responseObject.getAsJsonArray("rules") ?: throw Exception("Backend response is missing 'rules'")
             val type = object : com.google.gson.reflect.TypeToken<List<StoredRule>>() {}.type
             val storedRules: List<StoredRule> = gson.fromJson(rulesJson, type)
 
@@ -105,11 +87,7 @@ class RuleStorage {
         }
     }
 
-    suspend fun saveRulesToBackend(
-        accessToken: String,
-        backendBaseUrl: String,
-        rules: List<PlaylistRule>
-    ) = withContext(Dispatchers.IO) {
+    suspend fun saveRulesToBackend(accessToken: String, backendBaseUrl: String, rules: List<PlaylistRule>) = withContext(Dispatchers.IO) {
         val storedRules = rules.map { rule ->
             StoredRule(
                 id = rule.id,
@@ -125,32 +103,22 @@ class RuleStorage {
             )
         }
 
-        val payload = gson.toJson(
-            mapOf("rules" to storedRules)
-        )
-
-        val connection = URL("$backendBaseUrl/api/rules")
-            .openConnection() as HttpURLConnection
+        val payload = gson.toJson(mapOf("rules" to storedRules))
+        val connection = URL("$backendBaseUrl/api/rules").openConnection() as HttpURLConnection
 
         try {
             connection.requestMethod = "PUT"
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
-            connection.setRequestProperty(
-                "Authorization",
-                "Bearer $accessToken"
-            )
+            connection.setRequestProperty("Authorization", "Bearer $accessToken")
             connection.connectTimeout = 15000
             connection.readTimeout = 15000
-
-            connection.outputStream.bufferedWriter().use { writer ->
-                writer.write(payload)
-            }
+            connection.outputStream.bufferedWriter().use { writer -> writer.write(payload) }
 
             val status = connection.responseCode
             val response = (
-                    if (status in 200..299) connection.inputStream
-                    else connection.errorStream
+                if (status in 200..299) connection.inputStream
+                else connection.errorStream
                     )?.bufferedReader()?.use { it.readText() }.orEmpty()
 
             if (status !in 200..299) {

@@ -55,15 +55,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,12 +81,6 @@ fun TimeAndPlaylistsScreen(
     showRestartDialog: Boolean,
     onDismissRestartDialog: () -> Unit
 ) {
-    val ruleText = Color(0xFF49382D)
-    val ruleMuted = Color(0xFF896B52)
-    val ruleBackground = Color(0xFFFFFEFC)
-    val ruleButton = Color(0xFFF4E5D4)
-    val deleteRed = Color(0xFFD32F2F)
-
     var expandedRuleIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var ruleToDelete by remember { mutableStateOf<PlaylistRule?>(null) }
     var showPriorityDialog by remember { mutableStateOf(false) }
@@ -107,27 +98,23 @@ fun TimeAndPlaylistsScreen(
             text = "rules",
             fontSize = 22.sp,
             fontWeight = FontWeight.SemiBold,
-            color = ruleText
+            color = AppColors.TextBrown
         )
 
         Spacer(modifier = Modifier.height(24.dp))
-
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Equalizer on the left of the priority button.
-            // Animate the equalizer only when a rule is actively playing.
             if (activeRuleId != null) {
                 PlayingEqualizer(
                     isPlaying = isPlaying && rules.any { rule ->
-                        rule.id == activeRuleId &&
-                                rule.playlists.any {
-                                    it.name.equals(currentPlaylistName, ignoreCase = true)
-                                }
+                        rule.id == activeRuleId && rule.playlists.any {
+                            it.name.equals(currentPlaylistName, ignoreCase = true)
+                        }
                     },
-                    color = ruleMuted,
+                    color = AppColors.TextLightBrown,
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
@@ -139,15 +126,13 @@ fun TimeAndPlaylistsScreen(
                     showPriorityDialog = true
                 },
                 shape = CircleShape,
-                border = BorderStroke(1.dp, ruleMuted),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = ruleMuted
-                )
+                border = BorderStroke(1.dp, AppColors.TextLightBrown),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.TextLightBrown)
             ) {
                 Text(
                     text = "priority: $priority",
                     fontSize = 15.sp,
-                    color = ruleMuted
+                    color = AppColors.TextLightBrown
                 )
             }
 
@@ -156,7 +141,7 @@ fun TimeAndPlaylistsScreen(
             Button(
                 onClick = onAddClick,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = ruleText,
+                    containerColor = AppColors.TextBrown,
                     contentColor = Color(0xFFFFF8EF)
                 ),
                 shape = CircleShape
@@ -180,7 +165,7 @@ fun TimeAndPlaylistsScreen(
                 Text(
                     text = "no rules added yet",
                     modifier = Modifier.align(Alignment.CenterHorizontally),
-                    color = ruleMuted,
+                    color = AppColors.TextLightBrown,
                     fontSize = 14.sp
                 )
             } else {
@@ -189,12 +174,7 @@ fun TimeAndPlaylistsScreen(
                     val playlistBelongsToRule = rule.playlists.any {
                         it.name.equals(currentPlaylistName, ignoreCase = true)
                     }
-
-                    val isActiveRule =
-                        rule.id == activeRuleId && playlistBelongsToRule
-
-                    val shouldAnimateEqualizer =
-                        isActiveRule && isPlaying
+                    val isActiveRule = rule.id == activeRuleId && playlistBelongsToRule
 
                     Card(
                         modifier = Modifier
@@ -204,22 +184,17 @@ fun TimeAndPlaylistsScreen(
                         border = if (isActiveRule) {
                             BorderStroke(
                                 width = 2.dp,
-                                color = Color(0xFF896B52)
+                                color = AppColors.Brown
                             )
                         } else {
                             null
                         },
-                        colors = CardDefaults.cardColors(
-                            containerColor = ruleBackground
-                        ),
-                        elevation = CardDefaults.cardElevation(
-                            defaultElevation = 2.dp
-                        )
+                        colors = CardDefaults.cardColors(containerColor = AppColors.GradientStart),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
                         Column(
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            // Rule header: name and condition icons on the left, arrow on the right.
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -236,14 +211,10 @@ fun TimeAndPlaylistsScreen(
                                                 expandedRuleIds + rule.id
                                             }
                                     }
-                                    .padding(
-                                        horizontal = 16.dp,
-                                        vertical = 18.dp
-                                    ),
+                                    .padding(horizontal = 16.dp, vertical = 18.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Rule name uses remaining space; condition icons keep their size.
                                 Row(
                                     modifier = Modifier.weight(1f),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -252,7 +223,7 @@ fun TimeAndPlaylistsScreen(
                                     Text(
                                         text = rule.name,
                                         modifier = Modifier.weight(1f, fill = false),
-                                        color = ruleText,
+                                        color = AppColors.TextBrown,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
@@ -264,8 +235,6 @@ fun TimeAndPlaylistsScreen(
                                         horizontalArrangement = Arrangement.spacedBy(3.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Keep all your existing time, season, rain,
-                                        // and equalizer icon conditions here.
                                         if (
                                             rule.triggerOption == "time only" ||
                                             rule.triggerOption == "season or time" ||
@@ -275,7 +244,7 @@ fun TimeAndPlaylistsScreen(
                                                 imageVector = Icons.Default.AccessTime,
                                                 contentDescription = "Time rule",
                                                 modifier = Modifier.size(18.dp),
-                                                tint = ruleMuted
+                                                tint = AppColors.TextLightBrown
                                             )
                                         }
 
@@ -288,7 +257,7 @@ fun TimeAndPlaylistsScreen(
                                                 imageVector = Icons.Default.Eco,
                                                 contentDescription = "Season rule",
                                                 modifier = Modifier.size(18.dp),
-                                                tint = ruleMuted
+                                                tint = AppColors.TextLightBrown
                                             )
                                         }
 
@@ -297,13 +266,12 @@ fun TimeAndPlaylistsScreen(
                                                 imageVector = Icons.Default.WaterDrop,
                                                 contentDescription = "Rain condition enabled",
                                                 modifier = Modifier.size(18.dp),
-                                                tint = ruleMuted
+                                                tint = AppColors.TextLightBrown
                                             )
                                         }
                                     }
                                 }
 
-                                // Arrow stays on the far right.
                                 Icon(
                                     imageVector = if (isExpanded) {
                                         Icons.Default.KeyboardArrowUp
@@ -315,19 +283,14 @@ fun TimeAndPlaylistsScreen(
                                     } else {
                                         "Expand rule"
                                     },
-                                    tint = ruleMuted
+                                    tint = AppColors.TextLightBrown
                                 )
                             }
 
-                            // Animated details section.
                             AnimatedVisibility(
                                 visible = isExpanded,
-                                enter = expandVertically(
-                                    expandFrom = Alignment.Top
-                                ) + fadeIn(),
-                                exit = shrinkVertically(
-                                    shrinkTowards = Alignment.Top
-                                ) + fadeOut()
+                                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
                             ) {
                                 Column(
                                     modifier = Modifier
@@ -338,13 +301,12 @@ fun TimeAndPlaylistsScreen(
                                             bottom = 16.dp
                                         )
                                 ) {
-
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
                                             text = "playlists",
-                                            color = ruleMuted,
+                                            color = AppColors.TextLightBrown,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
@@ -352,7 +314,7 @@ fun TimeAndPlaylistsScreen(
                                         if (rule.randomOrder) {
                                             Text(
                                                 text = " (shuffle)",
-                                                color = ruleMuted,
+                                                color = AppColors.TextLightBrown,
                                                 fontSize = 12.sp
                                             )
                                         }
@@ -372,7 +334,7 @@ fun TimeAndPlaylistsScreen(
                                             } else {
                                                 "${index + 1}. ${playlist.name}"
                                             },
-                                            color = ruleText,
+                                            color = AppColors.TextBrown,
                                             fontSize = 10.sp
                                         )
                                     }
@@ -381,14 +343,14 @@ fun TimeAndPlaylistsScreen(
                                         "season only" -> {
                                             Text(
                                                 text = "season",
-                                                color = ruleMuted,
+                                                color = AppColors.TextLightBrown,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold
                                             )
 
                                             Text(
                                                 text = rule.season,
-                                                color = ruleText,
+                                                color = AppColors.TextBrown,
                                                 fontSize = 10.sp
                                             )
                                         }
@@ -396,16 +358,14 @@ fun TimeAndPlaylistsScreen(
                                         "time only" -> {
                                             Text(
                                                 text = "time",
-                                                color = ruleMuted,
+                                                color = AppColors.TextLightBrown,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold
                                             )
 
                                             Text(
-                                                text = rule.timeRanges.joinToString(", ") { range ->
-                                                    "${formatRuleTime(range.first)} – ${formatRuleTime(range.second)}"
-                                                },
-                                                color = ruleText,
+                                                text = rule.timeRanges.joinToString(", ") { range -> "${formatRuleTime(range.first)} – ${formatRuleTime(range.second)}" },
+                                                color = AppColors.TextBrown,
                                                 fontSize = 10.sp
                                             )
                                         }
@@ -413,14 +373,14 @@ fun TimeAndPlaylistsScreen(
                                         "season and time" -> {
                                             Text(
                                                 text = "season",
-                                                color = ruleMuted,
+                                                color = AppColors.TextLightBrown,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold
                                             )
 
                                             Text(
                                                 text = rule.season,
-                                                color = ruleText,
+                                                color = AppColors.TextBrown,
                                                 fontSize = 10.sp
                                             )
 
@@ -428,16 +388,14 @@ fun TimeAndPlaylistsScreen(
 
                                             Text(
                                                 text = "time",
-                                                color = ruleMuted,
+                                                color = AppColors.TextLightBrown,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold
                                             )
 
                                             Text(
-                                                text = rule.timeRanges.joinToString(", ") { range ->
-                                                    "${formatRuleTime(range.first)} – ${formatRuleTime(range.second)}"
-                                                },
-                                                color = ruleText,
+                                                text = rule.timeRanges.joinToString(", ") { range -> "${formatRuleTime(range.first)} – ${formatRuleTime(range.second)}" },
+                                                color = AppColors.TextBrown,
                                                 fontSize = 10.sp
                                             )
                                         }
@@ -445,20 +403,19 @@ fun TimeAndPlaylistsScreen(
 
                                     Text(
                                         text = "rain",
-                                        color = ruleMuted,
+                                        color = AppColors.TextLightBrown,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
 
                                     Text(
                                         text = if (rule.rainEnabled) "yes" else "no",
-                                        color = ruleText,
+                                        color = AppColors.TextBrown,
                                         fontSize = 10.sp
                                     )
 
                                     Spacer(modifier = Modifier.height(10.dp))
 
-// Equal-width Edit and Delete buttons.
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -470,7 +427,7 @@ fun TimeAndPlaylistsScreen(
                                             modifier = Modifier.weight(1f),
                                             shape = RoundedCornerShape(10.dp),
                                             colors = ButtonDefaults.buttonColors(
-                                                containerColor = ruleText,
+                                                containerColor = AppColors.TextBrown,
                                                 contentColor = Color(0xFFFFF8EF)
                                             )
                                         ) {
@@ -482,13 +439,11 @@ fun TimeAndPlaylistsScreen(
                                         }
 
                                         Button(
-                                            onClick = {
-                                                ruleToDelete = rule
-                                            },
+                                            onClick = { ruleToDelete = rule },
                                             modifier = Modifier.weight(1f),
                                             shape = RoundedCornerShape(10.dp),
                                             colors = ButtonDefaults.buttonColors(
-                                                containerColor = deleteRed,
+                                                containerColor = AppColors.Red,
                                                 contentColor = Color.White
                                             )
                                         ) {
@@ -504,7 +459,6 @@ fun TimeAndPlaylistsScreen(
                         }
                     }
                 }
-
             }
         }
 
@@ -515,15 +469,15 @@ fun TimeAndPlaylistsScreen(
                 },
                 title = {
                     Text(
-                        text = "Delete rule?",
-                        color = ruleText,
+                        text = "delete rule?",
+                        color = AppColors.TextBrown,
                         fontWeight = FontWeight.SemiBold
                     )
                 },
                 text = {
                     Text(
-                        text = "are you sure you want to delete \"${rule.name}\"? This action cannot be undone.",
-                        color = ruleMuted
+                        text = "are you sure you want to delete \"${rule.name}\"? this action cannot be undone.",
+                        color = AppColors.TextLightBrown
                     )
                 },
                 confirmButton = {
@@ -533,13 +487,13 @@ fun TimeAndPlaylistsScreen(
                             ruleToDelete = null
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = deleteRed,
+                            containerColor = AppColors.Red,
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Text(
-                            text = "Delete",
+                            text = "delete",
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -550,15 +504,15 @@ fun TimeAndPlaylistsScreen(
                             ruleToDelete = null
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = ruleButton,
-                            contentColor = ruleText
+                            containerColor = AppColors.LightMocha,
+                            contentColor = AppColors.TextBrown
                         ),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Cancel")
+                        Text("cancel")
                     }
                 },
-                containerColor = ruleBackground
+                containerColor = AppColors.GradientStart
             )
         }
     }
@@ -566,25 +520,25 @@ fun TimeAndPlaylistsScreen(
     if (showRestartDialog) {
         AlertDialog(
             onDismissRequest = onDismissRestartDialog,
-            containerColor = ruleBackground,
+            containerColor = AppColors.GradientStart,
             title = {
                 Text(
                     text = "rule updated successfully",
-                    color = ruleText,
+                    color = AppColors.TextBrown,
                     fontWeight = FontWeight.SemiBold
                 )
             },
             text = {
                 Text(
                     text = "restart cloudberry for the changes to take effect.",
-                    color = ruleMuted
+                    color = AppColors.TextLightBrown
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = onDismissRestartDialog
                 ) {
-                    Text("close", color = ruleText)
+                    Text("close", color = AppColors.TextBrown)
                 }
             }
         )
@@ -595,11 +549,11 @@ fun TimeAndPlaylistsScreen(
             onDismissRequest = {
                 showPriorityDialog = false
             },
-            containerColor = ruleBackground,
+            containerColor = AppColors.GradientStart,
             title = {
                 Text(
                     text = "priority",
-                    color = ruleText,
+                    color = AppColors.TextBrown,
                     fontWeight = FontWeight.SemiBold
                 )
             },
@@ -608,7 +562,7 @@ fun TimeAndPlaylistsScreen(
                     if (priority.equals("time", ignoreCase = true)) {
                         Text(
                             text = "how it works",
-                            color = ruleText,
+                            color = AppColors.TextBrown,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp
                         )
@@ -617,14 +571,14 @@ fun TimeAndPlaylistsScreen(
 
                         Text(
                             text = "when a time-only rule and a season-only rule match at the same time, the time-only rule is chosen.",
-                            color = ruleMuted
+                            color = AppColors.TextLightBrown
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
 
                         Text(
                             text = "example",
-                            color = ruleText,
+                            color = AppColors.TextBrown,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp
                         )
@@ -633,12 +587,12 @@ fun TimeAndPlaylistsScreen(
 
                         Text(
                             text = "if your morning playlist is scheduled for 8:00–10:00 and a winter playlist is active, the morning playlist wins during that overlap.",
-                            color = ruleMuted
+                            color = AppColors.TextLightBrown
                         )
                     } else {
                         Text(
                             text = "how it works",
-                            color = ruleText,
+                            color = AppColors.TextBrown,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp
                         )
@@ -647,14 +601,14 @@ fun TimeAndPlaylistsScreen(
 
                         Text(
                             text = "when a season-only rule and a time-only rule match at the same time, the season-only rule is chosen.",
-                            color = ruleMuted
+                            color = AppColors.TextLightBrown
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
 
                         Text(
                             text = "example",
-                            color = ruleText,
+                            color = AppColors.TextBrown,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp
                         )
@@ -663,7 +617,7 @@ fun TimeAndPlaylistsScreen(
 
                         Text(
                             text = "if a winter playlist is active while your morning playlist is scheduled for 8:00–10:00, the winter playlist wins during that overlap.",
-                            color = ruleMuted
+                            color = AppColors.TextLightBrown
                         )
                     }
 
@@ -671,7 +625,7 @@ fun TimeAndPlaylistsScreen(
 
                     Text(
                         text = "important",
-                        color = ruleText,
+                        color = AppColors.TextBrown,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp
                     )
@@ -680,7 +634,7 @@ fun TimeAndPlaylistsScreen(
 
                     Text(
                         text = "rules that match both the season and time always take priority over rules that match only one condition.",
-                        color = ruleMuted
+                        color = AppColors.TextLightBrown
                     )
                 }
             },
@@ -703,7 +657,7 @@ fun TimeAndPlaylistsScreen(
                     ) {
                         Text(
                             text = priority,
-                            color = ruleText
+                            color = AppColors.TextBrown
                         )
                     }
 
@@ -712,7 +666,7 @@ fun TimeAndPlaylistsScreen(
                             showPriorityDialog = false
                         }
                     ) {
-                        Text("close", color = ruleText)
+                        Text("close", color = AppColors.TextBrown)
                     }
                 }
             }
@@ -730,10 +684,7 @@ private fun formatRuleTime(index: Int): String {
 
 private fun vibrateDevice(context: Context) {
     val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val manager = context.getSystemService(
-            Context.VIBRATOR_MANAGER_SERVICE
-        ) as VibratorManager
-
+        val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
         manager.defaultVibrator
     } else {
         @Suppress("DEPRECATION")
@@ -743,10 +694,7 @@ private fun vibrateDevice(context: Context) {
     if (vibrator.hasVibrator()) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             vibrator.vibrate(
-                VibrationEffect.createOneShot(
-                    150,
-                    VibrationEffect.DEFAULT_AMPLITUDE
-                )
+                VibrationEffect.createOneShot(150, VibrationEffect.DEFAULT_AMPLITUDE)
             )
         } else {
             @Suppress("DEPRECATION")
@@ -756,11 +704,7 @@ private fun vibrateDevice(context: Context) {
 }
 
 @Composable
-private fun PlayingEqualizer(
-    isPlaying: Boolean,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
+private fun PlayingEqualizer(isPlaying: Boolean, color: Color, modifier: Modifier = Modifier) {
     val bar1: Float
     val bar2: Float
     val bar3: Float
@@ -817,7 +761,6 @@ private fun PlayingEqualizer(
             ),
             label = "equalizer bar 3"
         )
-
         bar1 = animatedBar1
         bar2 = animatedBar2
         bar3 = animatedBar3
@@ -832,11 +775,7 @@ private fun PlayingEqualizer(
         val gap = barWidth
         val heights = listOf(bar1, bar2, bar3)
 
-        heights.forEachIndexed { index, fraction ->
-            val height = size.height * (
-                    if (isPlaying) fraction else 0.3f
-                    )
-
+        heights.forEachIndexed { index, fraction -> val height = size.height * (if (isPlaying) fraction else 0.3f)
             val x = index * (barWidth + gap) + barWidth / 2f
 
             drawLine(

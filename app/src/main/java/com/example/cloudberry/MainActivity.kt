@@ -56,7 +56,8 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.flow.first
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -75,7 +76,13 @@ import android.os.Handler
 import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -96,7 +103,6 @@ private fun loadPriority(context: Context): String {
         PREFERENCES_NAME,
         Context.MODE_PRIVATE
     )
-
     return preferences.getString(PRIORITY_KEY, "time") ?: "time"
 }
 
@@ -110,32 +116,22 @@ private fun savePriority(context: Context, priority: String) {
         .apply()
 }
 class MainActivity : ComponentActivity() {
-
-    // Keep the Client ID from your existing code.
     private val clientId = "06c5732c93554d8abaea5b478ea6d286"
-
-    // Keep the existing redirect URI for App Remote.
-    private val appRemoteRedirectUri =
-        "https://com.example.cloudberry/callback"
-
-    // Separate redirect URI for playlist authorization.
-    private val authRedirectUri =
-        "com.example.cloudberry://callback"
-
+    private val appRemoteRedirectUri = "https://com.example.cloudberry/callback"
+    private val authRedirectUri = "com.example.cloudberry://callback"
     private val authRequestCode = 1337
     private val playlistTrackCache = mutableMapOf<String, List<String>>()
-
+    private val backendBaseUrl = "https://cloudberry-backend.onrender.com"
+    private val playedTrackUris = mutableSetOf<String>()
+    private val playlistLoadingLock = Any()
     private var spotifyAppRemote: SpotifyAppRemote? = null
     private var spotifyAccessToken: String? = null
     private var connectionStatus by mutableStateOf("Not connected")
     private var isConnecting by mutableStateOf(false)
-
     private var authStatus by mutableStateOf("Playlist access not authorized")
     private var isAuthorizing by mutableStateOf(false)
     private var isSpotifyLoggedIn by mutableStateOf(false)
-    // Held temporarily until we add the backend token exchange.
     private var authorizationCode: String? = null
-    private val backendBaseUrl = "https://cloudberry-backend.onrender.com"
     private var backendReady by mutableStateOf(false)
     private var playlists by mutableStateOf<List<SpotifyPlaylist>>(emptyList())
     private var currentTrackName by mutableStateOf("")
@@ -147,7 +143,7 @@ class MainActivity : ComponentActivity() {
     private var trackDurationMs by mutableStateOf(0L)
     private var playbackPositionUpdatedAt by mutableStateOf(0L)
     private var currentPlaylistName by mutableStateOf("")
-    private var playlistStatus by mutableStateOf("Loading playlist...")
+    private var playlistStatus by mutableStateOf("loading playlist...")
     private var isSwitchingPlaylist by mutableStateOf(false)
     private var selectedPage by mutableStateOf("home")
     private var spotifyProfilePicture by mutableStateOf<Bitmap?>(null)
@@ -157,26 +153,25 @@ class MainActivity : ComponentActivity() {
     private var counterPlaylistName = ""
     private var currentTrackCounter = 0
     private var totalPlaylistTracks = 0
-    private val playedTrackUris = mutableSetOf<String>()
     private var lastArtworkTrackUri: String? = null
-    @Volatile
-    private var isPlaylistTrackListReady = false
-    @Volatile
-    private var isPlaylistSessionActive = false
     private var pendingTrackDirection = 1
     private var counterLastTrackUri: String? = null
     private var counterLastTrackIndex = -1
     private var ignoreNextTrackChangeForCounter = false
     private var playlistTrackUris: List<String> = emptyList()
-    @Volatile
-    private var spotifySessionId = 0
-    @Volatile
-    private var pendingPlaylist: SpotifyPlaylist? = null
     private var activeRulePlaylistSequence by mutableStateOf(emptyList<SpotifyPlaylist>())
     @Volatile
     private var isUpdatingPlaylist = false
     @Volatile
     private var isLoadingPlaylists = false
+    @Volatile
+    private var isPlaylistTrackListReady = false
+    @Volatile
+    private var isPlaylistSessionActive = false
+    @Volatile
+    private var spotifySessionId = 0
+    @Volatile
+    private var pendingPlaylist: SpotifyPlaylist? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -203,15 +198,11 @@ class MainActivity : ComponentActivity() {
                         spotifyProfilePicture = spotifyProfilePicture,
                         spotifyUsername = spotifyUsername,
                         selectedPage = selectedPage,
-                        onPageSelected = { page ->
-                            selectedPage = page
-                        },
+                        onPageSelected = { page -> selectedPage = page },
                         currentTrackName = currentTrackName,
                         currentArtistName = currentArtistName,
                         currentPlaylistName = currentPlaylistName,
-                        onCurrentPlaylistNameChange = { name ->
-                            currentPlaylistName = name
-                        },
+                        onCurrentPlaylistNameChange = { name -> currentPlaylistName = name },
                         playlistStatus = playlistStatus,
                         albumArtwork = albumArtwork,
                         isPlaying = isPlaying,
@@ -229,7 +220,6 @@ class MainActivity : ComponentActivity() {
                         },
                         onConnectSpotify = { connectToSpotify() },
                         onAuthorizeSpotify = { authorizePlaylistAccess() },
-
                         onPrevious = {
                             pendingTrackDirection = -1
                             spotifyAppRemote?.playerApi?.skipPrevious()
@@ -251,30 +241,18 @@ class MainActivity : ComponentActivity() {
                         },
                         onQueuePlaylist = { playlist ->
                             pendingPlaylist = playlist
-
-                            Log.d(
-                                "Cloudberry",
-                                "Queued playlist for next track: ${playlist.name}"
-                            )
+                            Log.d("Cloudberry", "Queued playlist for next track: ${playlist.name}")
                         },
                         onSetRulePlaylistSequence = { sequence ->
                             activeRulePlaylistSequence = sequence
-
-                            Log.d(
-                                "CloudberryCounter",
-                                "Active rule playlist sequence: " +
-                                        sequence.joinToString(" -> ") { it.name }
-                            )
+                            Log.d("CloudberryCounter", "Active rule playlist sequence: " + sequence.joinToString(" -> ") { it.name })
                         },
                         onPlayPlaylist = { playlist ->
                             currentPlaylistName = playlist.name
 
                             startPlaylistCounter(playlist) { ready ->
                                 if (!ready) {
-                                    Log.e(
-                                        "CloudberryCounter",
-                                        "Cannot start ${playlist.name}: track list is unavailable"
-                                    )
+                                    Log.e("CloudberryCounter", "Cannot start ${playlist.name}: track list is unavailable")
                                     return@startPlaylistCounter
                                 }
 
@@ -287,30 +265,19 @@ class MainActivity : ComponentActivity() {
 
                                 playerApi.play("spotify:playlist:${playlist.id}")
                                     .setResultCallback {
-                                        // Only count tracks after Spotify accepts playback.
                                         lastCheckedTrackUri = null
                                         isPlaylistSessionActive = true
-
-                                        Log.d(
-                                            "CloudberryCounter",
-                                            "Started counting tracks for ${playlist.name}"
-                                        )
+                                        Log.d("CloudberryCounter", "Started counting tracks for ${playlist.name}")
                                     }
                                     .setErrorCallback { error ->
                                         isPlaylistSessionActive = false
                                         currentPlaylistName = ""
-
-                                        Log.e(
-                                            "Cloudberry",
-                                            "Failed to play playlist: ${playlist.name}",
-                                            error
-                                        )
+                                        Log.e("Cloudberry", "Failed to play playlist: ${playlist.name}", error)
                                     }
                             }
                         },
                         onRequestPlaylistAccess = {
                             if (isAuthorizing) {
-                                // Authorization is already in progress.
                             } else if (spotifyAccessToken != null) {
                                 if (playlists.isEmpty()) {
                                     loadPlaylistsWithAccessToken(spotifyAccessToken!!)
@@ -337,49 +304,28 @@ class MainActivity : ComponentActivity() {
     private fun loadSpotifyProfilePicture(accessToken: String) {
         Thread {
             try {
-                val connection = URL(
-                    "https://api.spotify.com/v1/me"
-                ).openConnection() as HttpURLConnection
+                val connection = URL("https://api.spotify.com/v1/me").openConnection() as HttpURLConnection
 
                 connection.requestMethod = "GET"
-                connection.setRequestProperty(
-                    "Authorization",
-                    "Bearer $accessToken"
-                )
+                connection.setRequestProperty("Authorization", "Bearer $accessToken")
                 connection.connectTimeout = 10000
                 connection.readTimeout = 10000
 
                 val status = connection.responseCode
 
                 if (status !in 200..299) {
-                    Log.e(
-                        "Cloudberry",
-                        "Profile request failed: HTTP $status"
-                    )
+                    Log.e("Cloudberry", "Profile request failed: HTTP $status")
                     connection.disconnect()
                     return@Thread
                 }
 
-                val response = connection.inputStream
-                    .bufferedReader()
-                    .use { it.readText() }
-
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
                 connection.disconnect()
-
                 val profileJson = JSONObject(response)
+                val username = profileJson.optString("display_name", "")
 
-                // Read the Spotify display name.
-                val username = profileJson.optString(
-                    "display_name",
-                    ""
-                )
+                runOnUiThread { spotifyUsername = username }
 
-                // Update the username even if no profile picture exists.
-                runOnUiThread {
-                    spotifyUsername = username
-                }
-
-                // Read the profile picture URL.
                 val images = profileJson.optJSONArray("images")
                 val imageUrl = images
                     ?.optJSONObject(0)
@@ -387,15 +333,12 @@ class MainActivity : ComponentActivity() {
                     ?.takeIf { it.isNotBlank() }
 
                 if (imageUrl == null) {
-                    runOnUiThread {
-                        spotifyProfilePicture = null
-                    }
+                    runOnUiThread { spotifyProfilePicture = null }
                     Log.d("Cloudberry", "No Spotify profile picture found")
                     return@Thread
                 }
 
-                val imageConnection = URL(imageUrl)
-                    .openConnection() as HttpURLConnection
+                val imageConnection = URL(imageUrl).openConnection() as HttpURLConnection
 
                 imageConnection.connectTimeout = 10000
                 imageConnection.readTimeout = 10000
@@ -410,11 +353,7 @@ class MainActivity : ComponentActivity() {
                     spotifyProfilePicture = bitmap
                 }
             } catch (error: Exception) {
-                Log.e(
-                    "Cloudberry",
-                    "Could not load Spotify profile",
-                    error
-                )
+                Log.e("Cloudberry", "Could not load Spotify profile", error)
             }
         }.start()
     }
@@ -433,46 +372,36 @@ class MainActivity : ComponentActivity() {
             .showAuthView(true)
             .build()
 
-        SpotifyAppRemote.connect(
-            this,
-            params,
-            object : Connector.ConnectionListener {
-                override fun onConnected(appRemote: SpotifyAppRemote) {
-                    runOnUiThread {
-                        spotifyAppRemote = appRemote
-                        isConnecting = false
-                        connectionStatus = "Connected to Spotify"
-                        observeSpotifyPlayer(appRemote)
-                    }
-                    Log.d("Cloudberry", "App Remote connected")
+        SpotifyAppRemote.connect(this, params, object : Connector.ConnectionListener {
+            override fun onConnected(appRemote: SpotifyAppRemote) {
+                runOnUiThread {
+                    spotifyAppRemote = appRemote
+                    isConnecting = false
+                    connectionStatus = "Connected to Spotify"
+                    observeSpotifyPlayer(appRemote)
                 }
+                Log.d("Cloudberry", "App Remote connected")
+            }
 
-                override fun onFailure(error: Throwable) {
-                    Log.e("Cloudberry", "App Remote connection failed", error)
-                    runOnUiThread {
-                        isConnecting = false
-                        connectionStatus =
-                            "Connection failed: ${error.localizedMessage ?: "Unknown error"}"
-                    }
+            override fun onFailure(error: Throwable) {
+                Log.e("Cloudberry", "App Remote connection failed", error)
+                runOnUiThread {
+                    isConnecting = false
+                    connectionStatus = "Connection failed: ${error.localizedMessage ?: "Unknown error"}"
                 }
             }
-        )
+        })
     }
-
 
     private fun logoutSpotify() {
         spotifySessionId++
         lastArtworkTrackUri = null
         albumArtwork = null
-        // Disconnect playback controls.
-        spotifyAppRemote?.let { remote ->
-            SpotifyAppRemote.disconnect(remote)
-        }
+        spotifyAppRemote?.let { remote -> SpotifyAppRemote.disconnect(remote) }
         spotifyAppRemote = null
         lastCheckedTrackUri = null
         activeRulePlaylistSequence = emptyList()
         pendingPlaylist = null
-        // Clear saved and in-memory playlist authorization.
         SpotifyTokenStorage(this).clearTokens()
         spotifyAccessToken = null
         authorizationCode = null
@@ -480,7 +409,6 @@ class MainActivity : ComponentActivity() {
         spotifyProfilePicture = null
         spotifyUsername = ""
         isSpotifyLoggedIn = false
-        // Reset Spotify-related UI state.
         connectionStatus = "not connected"
         isConnecting = false
         authStatus = "playlist access not authorized"
@@ -495,9 +423,7 @@ class MainActivity : ComponentActivity() {
         currentPositionMs = 0L
         trackDurationMs = 0L
         playbackPositionUpdatedAt = 0L
-        synchronized(playlistTrackCache) {
-            playlistTrackCache.clear()
-        }
+        synchronized(playlistTrackCache) { playlistTrackCache.clear() }
     }
 
     private fun handleSpotifyLoginLogout() {
@@ -511,53 +437,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
     private fun authorizePlaylistAccess() {
         if (isAuthorizing) return
-
         isAuthorizing = true
         authStatus = "Opening Spotify authorization..."
 
-        val request = AuthorizationRequest.Builder(
-            clientId,
-            AuthorizationResponse.Type.CODE,
-            authRedirectUri
-        )
-            .setScopes(
-                arrayOf(
-                    "playlist-read-private",
-                    "playlist-read-collaborative",
-                    "user-read-playback-state"
-                )
+        val request = AuthorizationRequest.Builder(clientId, AuthorizationResponse.Type.CODE, authRedirectUri).setScopes(
+            arrayOf(
+                "playlist-read-private",
+                "playlist-read-collaborative",
+                "user-read-playback-state"
             )
-            .build()
+        ).build()
 
-        try {
-            AuthorizationClient.openLoginActivity(
-                this,
-                authRequestCode,
-                request
-            )
-        } catch (error: Exception) {
+        try { AuthorizationClient.openLoginActivity(this, authRequestCode, request) } catch (error: Exception) {
             isAuthorizing = false
-            authStatus =
-                "could not start authorization: ${error.localizedMessage ?: "Unknown error"}"
+            authStatus = "could not start authorization: ${error.localizedMessage ?: "Unknown error"}"
             Log.e("Cloudberry", "Could not start authorization", error)
         }
     }
 
     @Deprecated("Uses Spotify Auth Library's documented activity-result flow")
-    override fun onActivityResult(
-        requestCode: Int,
-        resultCode: Int,
-        data: Intent?
-    ) {
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-
         if (requestCode != authRequestCode) return
-
         isAuthorizing = false
-
         val response = AuthorizationClient.getResponse(resultCode, data)
 
         when (response.type) {
@@ -574,8 +478,7 @@ class MainActivity : ComponentActivity() {
             }
 
             AuthorizationResponse.Type.ERROR -> {
-                authStatus =
-                    "Authorization failed: ${response.error ?: "Unknown error"}"
+                authStatus = "Authorization failed: ${response.error ?: "Unknown error"}"
                 Log.e("Cloudberry", authStatus)
             }
 
@@ -586,29 +489,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
     private fun exchangeCodeAndLoadPlaylists(code: String) {
         authStatus = "Exchanging code and loading playlists..."
 
         Thread {
             try {
-                // Exchange the authorization code through FastAPI.
-                val tokenConnection = URL(
-                    "$backendBaseUrl/api/spotify/token"
-                ).openConnection() as HttpURLConnection
+                val tokenConnection = URL("$backendBaseUrl/api/spotify/token").openConnection() as HttpURLConnection
 
                 tokenConnection.requestMethod = "POST"
                 tokenConnection.connectTimeout = 15000
                 tokenConnection.readTimeout = 15000
                 tokenConnection.doOutput = true
-                tokenConnection.setRequestProperty(
-                    "Content-Type",
-                    "application/json"
-                )
+                tokenConnection.setRequestProperty("Content-Type", "application/json")
 
-                val body = JSONObject()
-                    .put("code", code)
-                    .toString()
+                val body = JSONObject().put("code", code).toString()
 
                 tokenConnection.outputStream.use {
                     it.write(body.toByteArray(Charsets.UTF_8))
@@ -616,19 +510,17 @@ class MainActivity : ComponentActivity() {
 
                 val tokenStatus = tokenConnection.responseCode
                 val tokenBody = (
-                        if (tokenStatus in 200..299) {
-                            tokenConnection.inputStream
-                        } else {
-                            tokenConnection.errorStream
-                        }
+                    if (tokenStatus in 200..299) {
+                        tokenConnection.inputStream
+                    } else {
+                        tokenConnection.errorStream
+                    }
                         )?.bufferedReader()?.use { it.readText() }.orEmpty()
 
                 tokenConnection.disconnect()
 
                 if (tokenStatus !in 200..299) {
-                    throw IllegalStateException(
-                        "Token exchange failed ($tokenStatus): $tokenBody"
-                    )
+                    throw IllegalStateException("Token exchange failed ($tokenStatus): $tokenBody")
                 }
 
                 val tokenJson = JSONObject(tokenBody)
@@ -646,23 +538,16 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val refreshToken = tokenJson.optString("refresh_token")
-                    .takeIf { it.isNotBlank() }
+                val refreshToken = tokenJson.optString("refresh_token").takeIf { it.isNotBlank() }
 
                 if (refreshToken != null) {
-                    SpotifyTokenStorage(this@MainActivity)
-                        .saveRefreshToken(refreshToken)
+                    SpotifyTokenStorage(this@MainActivity).saveRefreshToken(refreshToken)
                 }
 
-                // Fetch the user's Spotify playlists using the reusable function.
                 loadPlaylistsWithAccessToken(accessToken)
 
             } catch (error: Exception) {
-                Log.e(
-                    "Cloudberry",
-                    "Token exchange or playlist loading failed",
-                    error
-                )
+                Log.e("Cloudberry", "Token exchange or playlist loading failed", error)
 
                 runOnUiThread {
                     authStatus =
@@ -671,7 +556,6 @@ class MainActivity : ComponentActivity() {
             }
         }.start()
     }
-
 
     private fun restoreSpotifyAuthorization() {
         val refreshToken = SpotifyTokenStorage(this).getRefreshToken()
@@ -685,35 +569,26 @@ class MainActivity : ComponentActivity() {
 
         Thread {
             try {
-                val connection = URL(
-                    "$backendBaseUrl/api/spotify/refresh"
-                ).openConnection() as HttpURLConnection
+                val connection = URL("$backendBaseUrl/api/spotify/refresh").openConnection() as HttpURLConnection
 
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 15000
                 connection.readTimeout = 15000
                 connection.doOutput = true
-                connection.setRequestProperty(
-                    "Content-Type",
-                    "application/json"
-                )
+                connection.setRequestProperty("Content-Type", "application/json")
 
-                val body = JSONObject()
-                    .put("refresh_token", refreshToken)
-                    .toString()
+                val body = JSONObject().put("refresh_token", refreshToken).toString()
 
-                connection.outputStream.use {
-                    it.write(body.toByteArray(Charsets.UTF_8))
-                }
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
 
                 val status = connection.responseCode
                 val responseBody = (
-                        if (status in 200..299) {
-                            connection.inputStream
-                        } else {
-                            connection.errorStream
-                        }
-                        )?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    if (status in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
+                    )?.bufferedReader()?.use { it.readText() }.orEmpty()
 
                 connection.disconnect()
 
@@ -737,7 +612,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Spotify may return a replacement refresh token.
                 val newRefreshToken = tokenJson.optString("refresh_token")
                 if (newRefreshToken.isNotBlank()) {
                     SpotifyTokenStorage(this).saveRefreshToken(newRefreshToken)
@@ -755,11 +629,6 @@ class MainActivity : ComponentActivity() {
             }
         }.start()
     }
-
-
-
-
-    private val playlistLoadingLock = Any()
 
     private fun loadPlaylistsWithAccessToken(accessToken: String) {
         val sessionIdAtStart = spotifySessionId
@@ -780,28 +649,22 @@ class MainActivity : ComponentActivity() {
                 var hasMore = true
 
                 while (hasMore) {
-                    val url =
-                        "https://api.spotify.com/v1/me/playlists?limit=$limit&offset=$offset"
-
-                    val connection =
-                        URL(url).openConnection() as HttpURLConnection
+                    val url = "https://api.spotify.com/v1/me/playlists?limit=$limit&offset=$offset"
+                    val connection = URL(url).openConnection() as HttpURLConnection
 
                     try {
                         connection.requestMethod = "GET"
                         connection.connectTimeout = 15000
                         connection.readTimeout = 15000
-                        connection.setRequestProperty(
-                            "Authorization",
-                            "Bearer $accessToken"
-                        )
+                        connection.setRequestProperty("Authorization", "Bearer $accessToken")
 
                         val status = connection.responseCode
                         val body = (
-                                if (status in 200..299) {
-                                    connection.inputStream
-                                } else {
-                                    connection.errorStream
-                                }
+                            if (status in 200..299) {
+                                connection.inputStream
+                            } else {
+                                connection.errorStream
+                            }
                                 )?.bufferedReader()?.use { it.readText() }.orEmpty()
 
                         if (status !in 200..299) {
@@ -823,18 +686,13 @@ class MainActivity : ComponentActivity() {
                             loadedPlaylists.add(
                                 SpotifyPlaylist(
                                     id = item.getString("id"),
-                                    name = item.optString(
-                                        "name",
-                                        "Unnamed playlist"
-                                    ),
+                                    name = item.optString("name", "Unnamed playlist"),
                                     imageUrl = imageUrl
                                 )
                             )
                         }
 
-                        hasMore = !response.isNull("next") &&
-                                response.optString("next").isNotBlank()
-
+                        hasMore = !response.isNull("next") && response.optString("next").isNotBlank()
                         offset += items.length()
 
                         if (items.length() == 0) {
@@ -847,16 +705,12 @@ class MainActivity : ComponentActivity() {
 
                 runOnUiThread {
                     if (sessionIdAtStart != spotifySessionId) {
-                        Log.d(
-                            "Cloudberry",
-                            "Ignoring playlist results from an old Spotify session"
-                        )
+                        Log.d("Cloudberry", "Ignoring playlist results from an old Spotify session")
                         return@runOnUiThread
                     }
 
                     playlists = loadedPlaylists
-                    authStatus =
-                        "Playlist access restored: ${loadedPlaylists.size} playlists loaded."
+                    authStatus = "Playlist access restored: ${loadedPlaylists.size} playlists loaded."
                 }
             } catch (error: Exception) {
                 Log.e("Cloudberry", "Could not load Spotify playlists", error)
@@ -866,8 +720,7 @@ class MainActivity : ComponentActivity() {
                         return@runOnUiThread
                     }
 
-                    authStatus =
-                        "Could not load playlists: ${error.message ?: "Unknown error"}"
+                    authStatus = "Could not load playlists: ${error.message ?: "Unknown error"}"
                 }
             } finally {
                 runOnUiThread {
@@ -888,7 +741,6 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // Prevent a new request while the previous one is still running.
         if (isUpdatingPlaylist) return
         isUpdatingPlaylist = true
 
@@ -896,17 +748,12 @@ class MainActivity : ComponentActivity() {
             var connection: HttpURLConnection? = null
 
             try {
-                connection = URL(
-                    "https://api.spotify.com/v1/me/player"
-                ).openConnection() as HttpURLConnection
+                connection = URL("https://api.spotify.com/v1/me/player").openConnection() as HttpURLConnection
 
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 10000
                 connection.readTimeout = 10000
-                connection.setRequestProperty(
-                    "Authorization",
-                    "Bearer $accessToken"
-                )
+                connection.setRequestProperty("Authorization", "Bearer $accessToken")
 
                 val status = connection.responseCode
 
@@ -919,18 +766,15 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val responseBody = (
-                        if (status in 200..299) {
-                            connection.inputStream
-                        } else {
-                            connection.errorStream
-                        }
+                    if (status in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
                         )?.bufferedReader()?.use { it.readText() }.orEmpty()
 
                 if (status !in 200..299) {
-                    Log.e(
-                        "Cloudberry",
-                        "Playback API error $status: $responseBody"
-                    )
+                    Log.e("Cloudberry", "Playback API error $status: $responseBody")
 
                     runOnUiThread {
                         if (status == 401) {
@@ -947,10 +791,7 @@ class MainActivity : ComponentActivity() {
                 val contextUri = context?.optString("uri").orEmpty()
                 val contextType = context?.optString("type").orEmpty()
 
-                if (
-                    contextType != "playlist" ||
-                    !contextUri.startsWith("spotify:playlist:")
-                ) {
+                if (contextType != "playlist" || !contextUri.startsWith("spotify:playlist:")) {
                     runOnUiThread {
                         currentPlaylistName = ""
                         playlistStatus = "playing outside a playlist"
@@ -959,11 +800,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val playlistId = contextUri.substringAfterLast(":")
-
-                // First search the playlists already loaded into Cloudberry.
-                val savedPlaylist = playlists.firstOrNull {
-                    it.id == playlistId
-                }
+                val savedPlaylist = playlists.firstOrNull { it.id == playlistId }
 
                 if (savedPlaylist != null) {
                     runOnUiThread {
@@ -973,38 +810,28 @@ class MainActivity : ComponentActivity() {
                     return@Thread
                 }
 
-                // The playlist isn't in the user's loaded playlist list.
                 var playlistConnection: HttpURLConnection? = null
 
                 try {
-                    playlistConnection = URL(
-                        "https://api.spotify.com/v1/playlists/$playlistId"
-                    ).openConnection() as HttpURLConnection
+                    playlistConnection = URL("https://api.spotify.com/v1/playlists/$playlistId").openConnection() as HttpURLConnection
 
                     playlistConnection.requestMethod = "GET"
                     playlistConnection.connectTimeout = 10000
                     playlistConnection.readTimeout = 10000
-                    playlistConnection.setRequestProperty(
-                        "Authorization",
-                        "Bearer $accessToken"
-                    )
+                    playlistConnection.setRequestProperty("Authorization", "Bearer $accessToken")
 
                     val playlistStatusCode = playlistConnection.responseCode
 
                     val playlistBody = (
-                            if (playlistStatusCode in 200..299) {
-                                playlistConnection.inputStream
-                            } else {
-                                playlistConnection.errorStream
-                            }
+                        if (playlistStatusCode in 200..299) {
+                            playlistConnection.inputStream
+                        } else {
+                            playlistConnection.errorStream
+                        }
                             )?.bufferedReader()?.use { it.readText() }.orEmpty()
 
                     if (playlistStatusCode !in 200..299) {
-                        Log.e(
-                            "Cloudberry",
-                            "Playlist details error $playlistStatusCode: $playlistBody"
-                        )
-
+                        Log.e("Cloudberry", "Playlist details error $playlistStatusCode: $playlistBody")
                         return@Thread
                     }
 
@@ -1017,7 +844,7 @@ class MainActivity : ComponentActivity() {
                             playlistStatus = ""
                         } else {
                             currentPlaylistName = ""
-                            playlistStatus = "Playlist name unavailable"
+                            playlistStatus = "playlist name unavailable"
                         }
                     }
                 } finally {
@@ -1041,12 +868,8 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
-
-
-    private fun startPlaylistCounter(
-        playlist: SpotifyPlaylist,
-        onReady: (Boolean) -> Unit = {}
-    ) {
+    private fun startPlaylistCounter(playlist: SpotifyPlaylist, onReady: (Boolean) -> Unit = {}) {
+        Log.d("CloudberryCounter", "Loading ordered track URIs for ${playlist.name}")
         counterPlaylistId = playlist.id
         counterPlaylistName = playlist.name
         currentTrackCounter = 0
@@ -1059,21 +882,12 @@ class MainActivity : ComponentActivity() {
         isPlaylistSessionActive = false
         ignoreNextTrackChangeForCounter = true
 
-        Log.d(
-            "CloudberryCounter",
-            "Loading ordered track URIs for ${playlist.name}"
-        )
         val sessionIdAtStart = spotifySessionId
         val accessToken = spotifyAccessToken
-        val cachedUris = synchronized(playlistTrackCache) {
-            playlistTrackCache[playlist.id]
-        }
+        val cachedUris = synchronized(playlistTrackCache) { playlistTrackCache[playlist.id] }
 
         if (accessToken.isNullOrBlank()) {
-            Log.e(
-                "CloudberryCounter",
-                "Cannot load tracks: no Spotify access token"
-            )
+            Log.e("CloudberryCounter", "Cannot load tracks: no Spotify access token")
             onReady(false)
             return
         }
@@ -1095,50 +909,34 @@ class MainActivity : ComponentActivity() {
 
             try {
                 while (true) {
-                    val url = URL(
-                        "https://api.spotify.com/v1/playlists/${playlist.id}/items" +
-                                "?limit=$limit&offset=$offset"
-                    )
-
-                    val connection =
-                        url.openConnection() as HttpURLConnection
+                    val url = URL("https://api.spotify.com/v1/playlists/${playlist.id}/items?limit=$limit&offset=$offset")
+                    val connection = url.openConnection() as HttpURLConnection
 
                     try {
                         connection.requestMethod = "GET"
-                        connection.setRequestProperty(
-                            "Authorization",
-                            "Bearer $accessToken"
-                        )
-                        connection.setRequestProperty(
-                            "Accept",
-                            "application/json"
-                        )
+                        connection.setRequestProperty("Authorization", "Bearer $accessToken")
+                        connection.setRequestProperty("Accept", "application/json")
                         connection.connectTimeout = 15000
                         connection.readTimeout = 15000
 
                         val status = connection.responseCode
 
                         val responseBody = (
-                                if (status in 200..299) {
-                                    connection.inputStream
-                                } else {
-                                    connection.errorStream
-                                }
+                            if (status in 200..299) {
+                                connection.inputStream
+                            } else {
+                                connection.errorStream
+                            }
                                 )?.bufferedReader()?.use { it.readText() }.orEmpty()
 
                         if (status !in 200..299) {
-                            throw IllegalStateException(
-                                "HTTP $status: $responseBody"
-                            )
+                            throw IllegalStateException("HTTP $status: $responseBody")
                         }
 
                         val json = JSONObject(responseBody)
                         spotifyTotal = json.optInt("total", spotifyTotal)
-
                         val items = json.optJSONArray("items")
-                            ?: throw IllegalStateException(
-                                "Spotify response did not contain an items array"
-                            )
+                            ?: throw IllegalStateException("Spotify response did not contain an items array")
 
                         for (i in 0 until items.length()) {
                             val entry = items.optJSONObject(i) ?: continue
@@ -1149,18 +947,12 @@ class MainActivity : ComponentActivity() {
 
                             val uri = track.optString("uri")
 
-                            if (
-                                uri.startsWith("spotify:track:") ||
-                                uri.startsWith("spotify:episode:")
-                            ) {
+                            if (uri.startsWith("spotify:track:") || uri.startsWith("spotify:episode:")) {
                                 loadedUris.add(uri)
                             }
                         }
 
-                        if (
-                            items.length() == 0 ||
-                            offset + items.length() >= spotifyTotal
-                        ) {
+                        if (items.length() == 0 || offset + items.length() >= spotifyTotal) {
                             break
                         }
 
@@ -1171,17 +963,12 @@ class MainActivity : ComponentActivity() {
                 }
 
                 runOnUiThread {
-                    // Ignore results from a previous Spotify login session.
                     if (sessionIdAtStart != spotifySessionId) {
-                        Log.d(
-                            "CloudberryCounter",
-                            "Ignoring track-list result from an old Spotify session"
-                        )
+                        Log.d("CloudberryCounter", "Ignoring track-list result from an old Spotify session")
                         onReady(false)
                         return@runOnUiThread
                     }
 
-                    // Ignore results if another playlist was selected meanwhile.
                     if (counterPlaylistId != playlist.id) {
                         onReady(false)
                         return@runOnUiThread
@@ -1195,22 +982,12 @@ class MainActivity : ComponentActivity() {
                     totalPlaylistTracks = loadedUris.distinct().size
                     isPlaylistTrackListReady = true
 
-                    Log.d(
-                        "CloudberryCounter",
-                        "Track list ready for ${playlist.name}: " +
-                                "${loadedUris.size} playable track URIs; " +
-                                "Spotify reported $spotifyTotal items"
-                    )
-
+                    Log.d("CloudberryCounter", "Track list ready for ${playlist.name}: ${loadedUris.size} playable track URIs; Spotify reported $spotifyTotal items")
                     onReady(loadedUris.isNotEmpty())
                 }
 
             } catch (error: Exception) {
-                Log.e(
-                    "CloudberryCounter",
-                    "Could not load ordered tracks for ${playlist.name}",
-                    error
-                )
+                Log.e("CloudberryCounter", "Could not load ordered tracks for ${playlist.name}", error)
 
                 runOnUiThread {
                     if (counterPlaylistId == playlist.id) {
@@ -1226,28 +1003,21 @@ class MainActivity : ComponentActivity() {
 
     private fun navigateRulePlaylist(direction: Int) {
         val sequence = activeRulePlaylistSequence
-
-        // Playlist navigation requires at least two playlists.
-        if (sequence.size < 2 || isSwitchingPlaylist) return
-
         val playerApi = spotifyAppRemote?.playerApi
 
+        if (sequence.size < 2 || isSwitchingPlaylist) return
         if (playerApi == null) {
             Log.e("Cloudberry", "Cannot change playlist: Spotify is not connected")
             return
         }
 
-        // Find the playlist currently being counted.
         val currentPlaylistId = counterPlaylistId
             ?: sequence.firstOrNull {
                 it.name.equals(currentPlaylistName, ignoreCase = true)
             }?.id
 
-        val currentIndex = sequence.indexOfFirst {
-            it.id == currentPlaylistId
-        }
+        val currentIndex = sequence.indexOfFirst { it.id == currentPlaylistId }
 
-        // Wrap around at either end of the sequence.
         val targetIndex = if (currentIndex == -1) {
             if (direction > 0) 0 else sequence.lastIndex
         } else {
@@ -1257,16 +1027,12 @@ class MainActivity : ComponentActivity() {
         val targetPlaylist = sequence[targetIndex]
         val playlistUri = "spotify:playlist:${targetPlaylist.id}"
 
-        // A manual choice takes priority over a previously queued switch.
         pendingPlaylist = null
         isSwitchingPlaylist = true
         isPlaylistSessionActive = false
         playlistStatus = "loading..."
 
-        Log.d(
-            "Cloudberry",
-            "Manual playlist navigation: ${targetPlaylist.name}"
-        )
+        Log.d("Cloudberry", "Manual playlist navigation: ${targetPlaylist.name}")
 
         startPlaylistCounter(targetPlaylist) { ready ->
             if (!ready) {
@@ -1281,351 +1047,223 @@ class MainActivity : ComponentActivity() {
             if (currentPlayerApi == null) {
                 isPlaylistSessionActive = false
                 isSwitchingPlaylist = false
-                playlistStatus = "Spotify is not connected"
+                playlistStatus = "spotify is not connected"
                 return@startPlaylistCounter
             }
 
-            currentPlayerApi.play(playlistUri)
-                .setResultCallback {
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        currentPlayerApi.skipToIndex(playlistUri, 0)
-                            .setResultCallback {
-                                lastCheckedTrackUri = null
-                                currentPlaylistName = targetPlaylist.name
-                                isPlaylistSessionActive = true
-                                isSwitchingPlaylist = false
-                                playlistStatus = ""
-
-                                Log.d(
-                                    "Cloudberry",
-                                    "Switched to playlist: ${targetPlaylist.name}"
-                                )
-                            }
-                            .setErrorCallback { error ->
-                                isPlaylistSessionActive = false
-                                isSwitchingPlaylist = false
-                                playlistStatus = "could not start playlist"
-
-                                Log.e(
-                                    "Cloudberry",
-                                    "Could not start first track of ${targetPlaylist.name}",
-                                    error
-                                )
-                            }
-                    }, 500L)
-
-                }
-                .setErrorCallback { error ->
-                    isPlaylistSessionActive = false
-                    isSwitchingPlaylist = false
-                    playlistStatus = "could not start playlist"
-
-                    Log.e(
-                        "Cloudberry",
-                        "Could not switch to ${targetPlaylist.name}",
-                        error
-                    )
-                }
+            currentPlayerApi.play(playlistUri).setResultCallback {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    currentPlayerApi.skipToIndex(playlistUri, 0)
+                        .setResultCallback {
+                            lastCheckedTrackUri = null
+                            currentPlaylistName = targetPlaylist.name
+                            isPlaylistSessionActive = true
+                            isSwitchingPlaylist = false
+                            playlistStatus = ""
+                            Log.d("Cloudberry", "Switched to playlist: ${targetPlaylist.name}")
+                        }
+                        .setErrorCallback { error ->
+                            isPlaylistSessionActive = false
+                            isSwitchingPlaylist = false
+                            playlistStatus = "could not start playlist"
+                            Log.e("Cloudberry", "Could not start first track of ${targetPlaylist.name}", error)
+                        }
+                }, 500L)
+            }.setErrorCallback { error ->
+                isPlaylistSessionActive = false
+                isSwitchingPlaylist = false
+                playlistStatus = "could not start playlist"
+                Log.e("Cloudberry", "Could not switch to ${targetPlaylist.name}", error)
+            }
         }
     }
 
     private fun observeSpotifyPlayer(appRemote: SpotifyAppRemote) {
-        appRemote.playerApi.subscribeToPlayerState()
-            .setEventCallback { playerState ->
-                val track = playerState.track
-                val trackUri = track?.uri
+        appRemote.playerApi.subscribeToPlayerState().setEventCallback { playerState ->
+            val track = playerState.track
+            val trackUri = track?.uri
 
-                if (trackUri != null && trackUri != lastCheckedTrackUri) {
-                    lastCheckedTrackUri = trackUri
+            if (trackUri != null && trackUri != lastCheckedTrackUri) {
+                lastCheckedTrackUri = trackUri
 
-                    // Count a track only when the playlist list is ready and
-// Cloudberry has started this playlist session.
-                    if (
-                        counterPlaylistId != null &&
-                        isPlaylistTrackListReady &&
-                        isPlaylistSessionActive
-                    ) {
-                        val trackIndex = playlistTrackUris.indexOf(trackUri)
+                if (counterPlaylistId != null && isPlaylistTrackListReady && isPlaylistSessionActive) {
+                    val trackIndex = playlistTrackUris.indexOf(trackUri)
 
-                        if (trackIndex >= 0) {
-                            // Capture the track and playlist detected at this moment.
-                            val changedTrackUri = trackUri
-                            val playlistIdAtDetection = counterPlaylistId
+                    if (trackIndex >= 0) {
+                        val changedTrackUri = trackUri
+                        val playlistIdAtDetection = counterPlaylistId
 
-                            Handler(Looper.getMainLooper()).postDelayed({
-                                // Ignore stale updates if another track or playlist has taken over.
-                                if (
-                                    lastCheckedTrackUri == changedTrackUri &&
-                                    counterPlaylistId == playlistIdAtDetection &&
-                                    isPlaylistTrackListReady &&
-                                    isPlaylistSessionActive
-                                ) {
-                                    val delayedTrackIndex =
-                                        playlistTrackUris.indexOf(changedTrackUri)
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            if (lastCheckedTrackUri == changedTrackUri && counterPlaylistId == playlistIdAtDetection && isPlaylistTrackListReady && isPlaylistSessionActive) {
+                                val delayedTrackIndex = playlistTrackUris.indexOf(changedTrackUri)
 
-                                    if (delayedTrackIndex >= 0) {
-                                        // Update the current playlist position.
-                                        currentTrackCounter = delayedTrackIndex + 1
-                                        counterLastTrackIndex = delayedTrackIndex
-                                        counterLastTrackUri = changedTrackUri
-                                        ignoreNextTrackChangeForCounter = false
+                                if (delayedTrackIndex >= 0) {
+                                    currentTrackCounter = delayedTrackIndex + 1
+                                    counterLastTrackIndex = delayedTrackIndex
+                                    counterLastTrackUri = changedTrackUri
+                                    ignoreNextTrackChangeForCounter = false
 
-                                        // Count this track only if it has not been counted before.
-                                        val isNewTrack =
-                                            playedTrackUris.add(changedTrackUri)
+                                    val isNewTrack = playedTrackUris.add(changedTrackUri)
 
-                                        if (isNewTrack) {
-                                            Log.d(
-                                                "CloudberryCounter",
-                                                "$counterPlaylistName: " +
-                                                        "unique tracks played " +
-                                                        "${playedTrackUris.size}/$totalPlaylistTracks; " +
-                                                        "current index " +
-                                                        "$currentTrackCounter/$totalPlaylistTracks"
-                                            )
-                                        } else {
-                                            Log.d(
-                                                "CloudberryCounter",
-                                                "$counterPlaylistName: replayed track; " +
-                                                        "unique tracks remain " +
-                                                        "${playedTrackUris.size}/$totalPlaylistTracks; " +
-                                                        "current index " +
-                                                        "$currentTrackCounter/$totalPlaylistTracks"
-                                            )
-                                        }
-                                    }
-                                }
-                            }, 200)
-                        } else {
-                            Log.d(
-                                "CloudberryCounter",
-                                "Current track not found in $counterPlaylistName: $trackUri"
-                            )
-
-                            // Spotify has moved beyond the playlist into recommended tracks.
-                            // Advance only after every unique URI in the playlist was counted.
-                            if (
-                                totalPlaylistTracks > 0 &&
-                                playedTrackUris.size >= totalPlaylistTracks
-                            ) {
-                                val sequence = activeRulePlaylistSequence
-                                val currentSequenceIndex = sequence.indexOfFirst {
-                                    it.id == counterPlaylistId
-                                }
-
-                                if (sequence.isNotEmpty() && currentSequenceIndex >= 0) {
-                                    val nextSequenceIndex =
-                                        (currentSequenceIndex + 1) % sequence.size
-
-                                    val nextPlaylist = sequence[nextSequenceIndex]
-
-                                    // Preserve a playlist switch already queued by the rule scheduler.
-                                    if (pendingPlaylist == null) {
-                                        pendingPlaylist = nextPlaylist
-
-                                        Log.d(
-                                            "CloudberryCounter",
-                                            "Unique-track counter complete " +
-                                                    "(${playedTrackUris.size}/$totalPlaylistTracks). " +
-                                                    "Recommended track detected; advancing to " +
-                                                    "${nextPlaylist.name} " +
-                                                    "(${nextSequenceIndex + 1}/${sequence.size})."
-                                        )
+                                    if (isNewTrack) {
+                                        Log.d("CloudberryCounter", "$counterPlaylistName: unique tracks played ${playedTrackUris.size}/$totalPlaylistTracks; current index $currentTrackCounter/$totalPlaylistTracks")
                                     } else {
-                                        Log.d(
-                                            "CloudberryCounter",
-                                            "Counter complete, but a playlist switch is already queued: " +
-                                                    "${pendingPlaylist?.name}"
-                                        )
+                                        Log.d("CloudberryCounter", "$counterPlaylistName: replayed track; unique tracks remain ${playedTrackUris.size}/$totalPlaylistTracks; current index $currentTrackCounter/$totalPlaylistTracks")
                                     }
+                                }
+                            }
+                        }, 200)
+                    } else {
+                        Log.d("CloudberryCounter", "Current track not found in $counterPlaylistName: $trackUri")
+
+                        if (totalPlaylistTracks > 0 && playedTrackUris.size >= totalPlaylistTracks) {
+                            val sequence = activeRulePlaylistSequence
+                            val currentSequenceIndex = sequence.indexOfFirst { it.id == counterPlaylistId }
+
+                            if (sequence.isNotEmpty() && currentSequenceIndex >= 0) {
+                                val nextSequenceIndex = (currentSequenceIndex + 1) % sequence.size
+                                val nextPlaylist = sequence[nextSequenceIndex]
+
+                                if (pendingPlaylist == null) {
+                                    pendingPlaylist = nextPlaylist
+                                    Log.d("CloudberryCounter", "Unique-track counter complete (${playedTrackUris.size}/$totalPlaylistTracks). Recommended track detected; advancing to ${nextPlaylist.name} (${nextSequenceIndex + 1}/${sequence.size}).")
                                 } else {
-                                    Log.w(
-                                        "CloudberryCounter",
-                                        "Counter complete, but the current playlist isn't in " +
-                                                "the active rule sequence. No automatic switch."
-                                    )
+                                    Log.d("CloudberryCounter", "Counter complete, but a playlist switch is already queued: ${pendingPlaylist?.name}")
                                 }
                             } else {
-                                Log.d(
-                                    "CloudberryCounter",
-                                    "Recommended track ignored: unique-track counter is not complete " +
-                                            "(${playedTrackUris.size}/$totalPlaylistTracks)."
-                                )
+                                Log.w("CloudberryCounter", "Counter complete, but the current playlist isn't in the active rule sequence. No automatic switch.")
                             }
+                        } else {
+                            Log.d("CloudberryCounter", "Recommended track ignored: unique-track counter is not complete (${playedTrackUris.size}/$totalPlaylistTracks).")
                         }
                     }
+                }
 
+                val playlistToApply = pendingPlaylist
 
+                if (playlistToApply != null) {
+                    pendingPlaylist = null
 
-                    val playlistToApply = pendingPlaylist
+                    Log.d("Cloudberry", "Track changed. Preparing playlist switch: ${playlistToApply.name}")
 
-                    if (playlistToApply != null) {
-                        // Consume the queued playlist so it isn't applied repeatedly.
-                        pendingPlaylist = null
+                    runOnUiThread {
+                        isSwitchingPlaylist = true
+                        playlistStatus = "loading..."
+                    }
 
-                        Log.d(
-                            "Cloudberry",
-                            "Track changed. Preparing playlist switch: ${playlistToApply.name}"
-                        )
+                    Thread {
+                        try {
+                            Thread.sleep(300)
 
-                        runOnUiThread {
-                            isSwitchingPlaylist = true
-                            playlistStatus = "loading..."
-                        }
+                            runOnUiThread {
+                                val playlistUri = "spotify:playlist:${playlistToApply.id}"
 
-                        Thread {
-                            try {
-                                // Give Spotify a moment to settle after the track changes.
-                                Thread.sleep(300)
+                                if (spotifyAppRemote?.playerApi == null) {
+                                    Log.e("Cloudberry", "Spotify is not connected")
+                                    isPlaylistSessionActive = false
+                                    isSwitchingPlaylist = false
+                                    updateCurrentPlaylist()
+                                } else {
+                                    startPlaylistCounter(playlistToApply) { ready ->
+                                        if (!ready) {
+                                            isPlaylistSessionActive = false
+                                            isSwitchingPlaylist = false
+                                            updateCurrentPlaylist()
+                                        } else {
+                                            val currentPlayerApi = spotifyAppRemote?.playerApi
 
-                                runOnUiThread {
-                                    val playlistUri = "spotify:playlist:${playlistToApply.id}"
-
-                                    if (spotifyAppRemote?.playerApi == null) {
-                                        Log.e("Cloudberry", "Spotify is not connected")
-                                        isPlaylistSessionActive = false
-                                        isSwitchingPlaylist = false
-                                        updateCurrentPlaylist()
-                                    } else {
-                                        startPlaylistCounter(playlistToApply) { ready ->
-                                            if (!ready) {
+                                            if (currentPlayerApi == null) {
                                                 isPlaylistSessionActive = false
                                                 isSwitchingPlaylist = false
                                                 updateCurrentPlaylist()
                                             } else {
-                                                val currentPlayerApi = spotifyAppRemote?.playerApi
+                                                currentPlayerApi.play(playlistUri).setResultCallback {
+                                                    currentPlayerApi.skipToIndex(playlistUri, 0).setResultCallback {
+                                                        lastCheckedTrackUri = null
+                                                        isPlaylistSessionActive = true
 
-                                                if (currentPlayerApi == null) {
-                                                    isPlaylistSessionActive = false
-                                                    isSwitchingPlaylist = false
-                                                    updateCurrentPlaylist()
-                                                } else {
-                                                    currentPlayerApi.play(playlistUri)
-                                                        .setResultCallback {
-                                                            currentPlayerApi.skipToIndex(playlistUri, 0)
-                                                                .setResultCallback {
-                                                                    lastCheckedTrackUri = null
-                                                                    isPlaylistSessionActive = true
+                                                        Log.d("Cloudberry", "Started queued playlist with counter ready: " + playlistToApply.name)
 
-                                                                    Log.d(
-                                                                        "Cloudberry",
-                                                                        "Started queued playlist with counter ready: " +
-                                                                                playlistToApply.name
-                                                                    )
-
-                                                                    Thread {
-                                                                        try {
-                                                                            Thread.sleep(300)
-                                                                        } finally {
-                                                                            runOnUiThread {
-                                                                                isSwitchingPlaylist = false
-                                                                                updateCurrentPlaylist()
-                                                                            }
-                                                                        }
-                                                                    }.start()
-                                                                }
-                                                                .setErrorCallback { error ->
-                                                                    isPlaylistSessionActive = false
-
-                                                                    Log.e(
-                                                                        "Cloudberry",
-                                                                        "Failed to restart queued playlist: " +
-                                                                                playlistToApply.name,
-                                                                        error
-                                                                    )
-
+                                                        Thread {
+                                                            try {
+                                                                Thread.sleep(300)
+                                                            } finally {
+                                                                runOnUiThread {
                                                                     isSwitchingPlaylist = false
                                                                     updateCurrentPlaylist()
                                                                 }
-                                                        }
-                                                        .setErrorCallback { error ->
-                                                            isPlaylistSessionActive = false
-
-                                                            Log.e(
-                                                                "Cloudberry",
-                                                                "Failed to start queued playlist: " +
-                                                                        playlistToApply.name,
-                                                                error
-                                                            )
-
-                                                            isSwitchingPlaylist = false
-                                                            updateCurrentPlaylist()
-                                                        }
+                                                            }
+                                                        }.start()
+                                                    }.setErrorCallback { error ->
+                                                        Log.e("Cloudberry", "Failed to restart queued playlist: " + playlistToApply.name, error)
+                                                        isPlaylistSessionActive = false
+                                                        isSwitchingPlaylist = false
+                                                        updateCurrentPlaylist()
+                                                    }
+                                                }.setErrorCallback { error ->
+                                                    Log.e("Cloudberry", "Failed to start queued playlist: " + playlistToApply.name, error)
+                                                    isPlaylistSessionActive = false
+                                                    isSwitchingPlaylist = false
+                                                    updateCurrentPlaylist()
                                                 }
                                             }
                                         }
                                     }
                                 }
-                            } catch (error: InterruptedException) {
-                                Thread.currentThread().interrupt()
-
-                                runOnUiThread {
-                                    isSwitchingPlaylist = false
-                                    updateCurrentPlaylist()
-                                }
                             }
-                        }.start()
-                    } else {
-                        // No queued playlist: check the playlist for the new track.
-                        updateCurrentPlaylist()
-                    }
-                }
+                        } catch (error: InterruptedException) {
+                            Thread.currentThread().interrupt()
 
-
-                runOnUiThread {
-                    if (track != null) {
-                        currentTrackName = track.name
-                        currentArtistName = track.artist.name
-                        isPlaying = !playerState.isPaused
-                        hasCurrentTrack = true
-                        currentPositionMs = playerState.playbackPosition
-                        trackDurationMs = track.duration
-                        playbackPositionUpdatedAt = android.os.SystemClock.elapsedRealtime()
-
-                        if (trackUri != null && trackUri != lastArtworkTrackUri) {
-                            lastArtworkTrackUri = trackUri
-                            albumArtwork = null
-
-                            appRemote.imagesApi
-                                .getImage(track.imageUri)
-                                .setResultCallback { bitmap ->
-                                    runOnUiThread {
-                                        // Ignore artwork returned for an older track.
-                                        if (lastArtworkTrackUri == trackUri) {
-                                            albumArtwork = bitmap
-                                        }
-                                    }
-                                }
-                                .setErrorCallback { error ->
-                                    Log.e(
-                                        "Cloudberry",
-                                        "Could not load album artwork",
-                                        error
-                                    )
-                                }
+                            runOnUiThread {
+                                isSwitchingPlaylist = false
+                                updateCurrentPlaylist()
+                            }
                         }
-                    } else {
-                        currentTrackName = ""
-                        currentArtistName = ""
-                        albumArtwork = null
-                        lastArtworkTrackUri = null
-                        isPlaying = false
-                        hasCurrentTrack = false
-                        currentPositionMs = 0L
-                        trackDurationMs = 0L
-                        playbackPositionUpdatedAt = 0L
-                    }
+                    }.start()
+                } else {
+                    updateCurrentPlaylist()
                 }
             }
-            .setErrorCallback { error ->
-                Log.e(
-                    "Cloudberry",
-                    "Could not subscribe to Spotify player state",
-                    error
-                )
-            }
-    }
 
+            runOnUiThread {
+                if (track != null) {
+                    currentTrackName = track.name
+                    currentArtistName = track.artist.name
+                    isPlaying = !playerState.isPaused
+                    hasCurrentTrack = true
+                    currentPositionMs = playerState.playbackPosition
+                    trackDurationMs = track.duration
+                    playbackPositionUpdatedAt = android.os.SystemClock.elapsedRealtime()
+
+                    if (trackUri != null && trackUri != lastArtworkTrackUri) {
+                        lastArtworkTrackUri = trackUri
+                        albumArtwork = null
+
+                        appRemote.imagesApi.getImage(track.imageUri).setResultCallback { bitmap ->
+                            runOnUiThread {
+                                if (lastArtworkTrackUri == trackUri) { albumArtwork = bitmap }
+                            }
+                        }.setErrorCallback { error ->
+                            Log.e("Cloudberry", "Could not load album artwork", error)
+                        }
+                    }
+                } else {
+                    currentTrackName = ""
+                    currentArtistName = ""
+                    albumArtwork = null
+                    lastArtworkTrackUri = null
+                    isPlaying = false
+                    hasCurrentTrack = false
+                    currentPositionMs = 0L
+                    trackDurationMs = 0L
+                    playbackPositionUpdatedAt = 0L
+                }
+
+            }
+        }.setErrorCallback { error ->
+            Log.e("Cloudberry", "Could not subscribe to Spotify player state", error)
+        }
+    }
 
     override fun onResume() {
         super.onResume()
@@ -1635,11 +1273,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
     override fun onDestroy() {
-        spotifyAppRemote?.let {
-            SpotifyAppRemote.disconnect(it)
-        }
+        spotifyAppRemote?.let { SpotifyAppRemote.disconnect(it) }
         spotifyAppRemote = null
         super.onDestroy()
     }
@@ -1670,7 +1305,7 @@ private fun CloudberryHome(
     currentPlaylistName: String,
     onCurrentPlaylistNameChange: (String) -> Unit,
     playlistStatus: String,
-    albumArtwork: android.graphics.Bitmap?,
+    albumArtwork: Bitmap?,
     isPlaying: Boolean,
     hasCurrentTrack: Boolean,
     playlists: List<SpotifyPlaylist>,
@@ -1688,75 +1323,28 @@ private fun CloudberryHome(
     onPlayPlaylist: (SpotifyPlaylist) -> Unit,
     onRequestPlaylistAccess: () -> Unit,
 ) {
-    val drawerState = rememberDrawerState(
-        initialValue = DrawerValue.Closed
-    )
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-
-    val fusedLocationClient = remember {
-        LocationServices.getFusedLocationProviderClient(context)
-    }
-
-    var userLatitude by remember {
-        mutableStateOf<Double?>(null)
-    }
-
-    var userLongitude by remember {
-        mutableStateOf<Double?>(null)
-    }
-
-    var locationStatus by remember {
-        mutableStateOf("Location not requested")
-    }
-
-    var weatherCity by remember {
-        mutableStateOf("")
-    }
-
-    var weatherCountry by remember {
-        mutableStateOf("")
-    }
-
-    var weatherTemperature by remember {
-        mutableStateOf<Double?>(null)
-    }
-
-    var weatherCondition by remember {
-        mutableStateOf("")
-    }
-
-    var weatherStatus by remember {
-        mutableStateOf("Waiting for location")
-    }
-    var isRaining by remember {
-        mutableStateOf(false)
-    }
-
-    var detectedSeason by remember {
-        mutableStateOf(detectSeason(Calendar.getInstance()))
-    }
-
-    var currentTime by remember {
-        mutableStateOf("")
-    }
-
-    var showRestartDialog by remember {
-        mutableStateOf(false)
-    }
-
-    var showSpotifyLoginDialog by remember {
-        mutableStateOf(false)
-    }
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    var userLatitude by remember { mutableStateOf<Double?>(null) }
+    var userLongitude by remember { mutableStateOf<Double?>(null) }
+    var locationStatus by remember { mutableStateOf("location not requested") }
+    var weatherCity by remember { mutableStateOf("") }
+    var weatherCountry by remember { mutableStateOf("") }
+    var weatherTemperature by remember { mutableStateOf<Double?>(null) }
+    var weatherCondition by remember { mutableStateOf("") }
+    var weatherStatus by remember { mutableStateOf("waiting for location...") }
+    var isRaining by remember { mutableStateOf(false) }
+    var detectedSeason by remember { mutableStateOf(detectSeason(Calendar.getInstance())) }
+    var currentTime by remember { mutableStateOf("") }
+    var showRestartDialog by remember { mutableStateOf(false) }
+    var showSpotifyLoginDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(isSpotifyLoggedIn) {
         if (!isSpotifyLoggedIn) {
-            kotlinx.coroutines.delay(1000L)
-
-            // Check again after the delay
-            if (!isSpotifyLoggedIn) {
-                showSpotifyLoginDialog = true
-            }
+            delay(1000L)
+            if (!isSpotifyLoggedIn) { showSpotifyLoginDialog = true }
         } else {
             showSpotifyLoginDialog = false
         }
@@ -1765,30 +1353,20 @@ private fun CloudberryHome(
     LaunchedEffect(Unit) {
         while (true) {
             val now = Calendar.getInstance()
-
             detectedSeason = detectSeason(now)
-
-            currentTime = String.format(
-                "%02d:%02d",
-                now.get(Calendar.HOUR_OF_DAY),
-                now.get(Calendar.MINUTE)
-            )
-
+            currentTime = String.format("%02d:%02d", now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE))
             delay(60_000)
         }
     }
 
     fun fetchWeather(latitude: Double, longitude: Double) {
-        weatherStatus = "Loading weather..."
+        weatherStatus = "loading weather..."
 
         Thread {
             var connection: HttpURLConnection? = null
 
             try {
-                val url = URL(
-                    "$backendBaseUrl/api/weather" +
-                            "?latitude=$latitude&longitude=$longitude"
-                )
+                val url = URL("$backendBaseUrl/api/weather?latitude=$latitude&longitude=$longitude")
 
                 connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
@@ -1798,21 +1376,18 @@ private fun CloudberryHome(
                 val status = connection.responseCode
 
                 val responseBody = (
-                        if (status in 200..299) {
-                            connection.inputStream
-                        } else {
-                            connection.errorStream
-                        }
+                    if (status in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
                         )?.bufferedReader()?.use { it.readText() }.orEmpty()
 
                 if (status !in 200..299) {
-                    throw IllegalStateException(
-                        "Weather request failed ($status): $responseBody"
-                    )
+                    throw IllegalStateException("Weather request failed ($status): $responseBody")
                 }
 
                 val json = JSONObject(responseBody)
-
                 val city = json.optString("city", "")
                 val country = json.optString("country", "")
                 val temperature = json.getDouble("temperature_c")
@@ -1820,30 +1395,19 @@ private fun CloudberryHome(
                 val rainDetected = json.getBoolean("is_raining")
                 val precipitation = json.getDouble("precip_mm")
 
-                android.os.Handler(
-                    android.os.Looper.getMainLooper()
-                ).post {
+                Handler(Looper.getMainLooper()).post {
                     weatherCity = city
                     weatherCountry = country
                     weatherTemperature = temperature
                     weatherCondition = condition
                     weatherStatus = "Weather loaded"
                     isRaining = rainDetected
-
-// Rain detection
-                    Log.d(
-                        "Cloudberry",
-                        "Weather loaded: $city, $condition, " +
-                                "${temperature}°C, raining=$isRaining, " +
-                                "precipitation=${precipitation}mm"
-                    )
+                    Log.d("Cloudberry", "Weather loaded: $city, $condition, ${temperature}°C, raining=$isRaining, precipitation=${precipitation}mm")
                 }
             } catch (error: Exception) {
                 Log.e("Cloudberry", "Failed to fetch weather", error)
 
-                android.os.Handler(
-                    android.os.Looper.getMainLooper()
-                ).post {
+                Handler(Looper.getMainLooper()).post {
                     weatherStatus = "Could not load weather"
                 }
             } finally {
@@ -1852,86 +1416,52 @@ private fun CloudberryHome(
         }.start()
     }
 
-    val locationPermissionLauncher =
-        rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestMultiplePermissions()
-        ) { permissions ->
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) {
+            locationStatus = "Location permission granted"
 
-            val granted =
-                permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                        permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-
-            if (granted) {
-                locationStatus = "Location permission granted"
-
-                try {
-                    fusedLocationClient.getCurrentLocation(
-                        Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                        null
-                    ).addOnSuccessListener { location ->
-
-                        if (location != null) {
-                            userLatitude = location.latitude
-                            userLongitude = location.longitude
-                            locationStatus = "Location obtained"
-                            fetchWeather(
-                                latitude = location.latitude,
-                                longitude = location.longitude
-                            )
-
-                            Log.d(
-                                "Cloudberry",
-                                "Location obtained: ${location.latitude}, ${location.longitude}"
-                            )
-                        } else {
-                            locationStatus = "Location unavailable"
-                            Log.w("Cloudberry", "Location result was null")
-                        }
-
-                    }.addOnFailureListener { error ->
-                        locationStatus = "Could not obtain location"
-                        Log.e("Cloudberry", "Location request failed", error)
-                    }
-                } catch (error: SecurityException) {
-                    locationStatus = "Location permission unavailable"
-                    Log.e("Cloudberry", "Location permission error", error)
-                }
-            } else {
-                locationStatus = "Location permission denied"
-                Log.d("Cloudberry", locationStatus)
-            }
-        }
-
-    LaunchedEffect(Unit) {
-        val fineGranted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        val coarseGranted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (fineGranted || coarseGranted) {
             try {
-                fusedLocationClient.getCurrentLocation(
-                    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                    null
-                ).addOnSuccessListener { location ->
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null).addOnSuccessListener { location ->
                     if (location != null) {
                         userLatitude = location.latitude
                         userLongitude = location.longitude
                         locationStatus = "Location obtained"
-                        fetchWeather(
-                            latitude = location.latitude,
-                            longitude = location.longitude
-                        )
+                        fetchWeather(latitude = location.latitude, longitude = location.longitude)
+                        Log.d("Cloudberry", "Location obtained: ${location.latitude}, ${location.longitude}")
+                    } else {
+                        locationStatus = "Location unavailable"
+                        Log.w("Cloudberry", "Location result was null")
+                    }
+                }.addOnFailureListener { error ->
+                    locationStatus = "Could not obtain location"
+                    Log.e("Cloudberry", "Location request failed", error)
+                }
+            } catch (error: SecurityException) {
+                locationStatus = "Location permission unavailable"
+                Log.e("Cloudberry", "Location permission error", error)
+            }
+        } else {
+            locationStatus = "Location permission denied"
+            Log.d("Cloudberry", locationStatus)
+        }
+    }
 
-                        Log.d(
-                            "Cloudberry",
-                            "Location obtained: ${location.latitude}, ${location.longitude}"
-                        )
+    LaunchedEffect(Unit) {
+        val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+        if (fineGranted || coarseGranted) {
+            try {
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null).addOnSuccessListener { location ->
+                    if (location != null) {
+                        userLatitude = location.latitude
+                        userLongitude = location.longitude
+                        locationStatus = "Location obtained"
+                        fetchWeather(latitude = location.latitude, longitude = location.longitude)
+                        Log.d("Cloudberry", "Location obtained: ${location.latitude}, ${location.longitude}")
                     } else {
                         locationStatus = "Location unavailable"
                     }
@@ -1944,38 +1474,20 @@ private fun CloudberryHome(
                 Log.e("Cloudberry", "Location permission error", error)
             }
         } else {
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                )
-            )
+            locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
         }
     }
 
-    val ruleStorage = remember {
-        RuleStorage()
-    }
-
-    var savedRules by remember {
-        mutableStateOf<List<PlaylistRule>>(emptyList())
-    }
-
-    var rulesLoaded by remember {
-        mutableStateOf(false)
-    }
-
-    var ruleBeingEdited by remember {
-        mutableStateOf<PlaylistRule?>(null)
-    }
-
-    var rulePriority by remember {
-        mutableStateOf(loadPriority(context))
-    }
+    val ruleStorage = remember { RuleStorage() }
+    var savedRules by remember { mutableStateOf<List<PlaylistRule>>(emptyList()) }
+    var rulesLoaded by remember { mutableStateOf(false) }
+    var ruleBeingEdited by remember { mutableStateOf<PlaylistRule?>(null) }
+    var rulePriority by remember { mutableStateOf(loadPriority(context)) }
+    var lastTriggeredRuleId by remember { mutableStateOf<String?>(null) }
+    var currentRuleName by remember { mutableStateOf("") }
 
     LaunchedEffect(spotifyAccessToken, ruleStorage) {
         rulesLoaded = false
-
         val token = spotifyAccessToken
 
         if (token.isNullOrBlank()) {
@@ -1991,7 +1503,6 @@ private fun CloudberryHome(
 
             savedRules = loadedRules
             rulesLoaded = true
-
             Log.d("Cloudberry", "Loaded ${loadedRules.size} rules from backend")
 
         } catch (error: Exception) {
@@ -1999,30 +1510,7 @@ private fun CloudberryHome(
         }
     }
 
-
-
-
-    var lastTriggeredRuleId by remember {
-        mutableStateOf<String?>(null)
-    }
-    var currentRuleName by remember {
-        mutableStateOf("")
-    }
-
-    var pendingPlaylist by remember {
-        mutableStateOf<SpotifyPlaylist?>(null)
-    }
-
-
-    LaunchedEffect(
-        selectedPage,
-        rulesLoaded,
-        savedRules,
-        playlists,
-        isRaining,
-        rulePriority
-    ) {
-        // Only run the scheduler while Home is visible.
+    LaunchedEffect(selectedPage, rulesLoaded, savedRules, playlists, isRaining, rulePriority) {
         if (selectedPage != "home") {
             return@LaunchedEffect
         }
@@ -2032,9 +1520,7 @@ private fun CloudberryHome(
             return@LaunchedEffect
         }
 
-        // Check immediately, then repeat while Home stays open.
         while (selectedPage == "home") {
-
             val now = Calendar.getInstance()
             val detectedSeason = detectSeason(now)
 
@@ -2056,18 +1542,17 @@ private fun CloudberryHome(
                     it.triggerOption.equals("season only", ignoreCase = true)
                 }
             } ?: matchingRules.firstOrNull()
+
             if (matchingRule == null) {
                 lastTriggeredRuleId = null
                 currentRuleName = "no matching rule"
                 onSetRulePlaylistSequence(emptyList())
             } else if (lastTriggeredRuleId != matchingRule.id) {
-                val orderedPlaylists = matchingRule.playlistOrder
-                    .filter { selected ->
-                        matchingRule.playlists.any {
-                            it.id == selected.id
-                        }
+                val orderedPlaylists = matchingRule.playlistOrder.filter { selected ->
+                    matchingRule.playlists.any {
+                        it.id == selected.id
                     }
-                    .distinctBy { it.id }
+                }.distinctBy { it.id }
 
                 val availablePlaylists = if (orderedPlaylists.isNotEmpty()) {
                     orderedPlaylists
@@ -2075,11 +1560,9 @@ private fun CloudberryHome(
                     matchingRule.playlists.distinctBy { it.id }
                 }
 
-// Resolve the rule's playlists to the Spotify playlists loaded in Cloudberry.
-                val spotifySequence = availablePlaylists
-                    .mapNotNull { selected ->
-                        playlists.firstOrNull { it.id == selected.id }
-                    }
+                val spotifySequence = availablePlaylists.mapNotNull { selected ->
+                    playlists.firstOrNull { it.id == selected.id }
+                }
 
                 val activeSequence = if (matchingRule.randomOrder) {
                     spotifySequence.shuffled()
@@ -2088,32 +1571,15 @@ private fun CloudberryHome(
                 }
 
                 onSetRulePlaylistSequence(activeSequence)
-
                 val selectedPlaylist = activeSequence.firstOrNull()
 
                 if (selectedPlaylist != null) {
-                    val currentTimeText = String.format(
-                        "%02d:%02d",
-                        now.get(Calendar.HOUR_OF_DAY),
-                        now.get(Calendar.MINUTE)
-                    )
-
-                    Log.d(
-                        "Cloudberry",
-                        "Rule '${matchingRule.name}' matched. " +
-                                "Season: $detectedSeason, " +
-                                "time: $currentTimeText, " +
-                                "playlist: ${selectedPlaylist.name}"
-                    )
+                    val currentTimeText = String.format("%02d:%02d", now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE))
+                    Log.d("Cloudberry", "Rule '${matchingRule.name}' matched. Season: $detectedSeason, time: $currentTimeText, playlist: ${selectedPlaylist.name}")
 
                     if (hasCurrentTrack) {
                         onQueuePlaylist(selectedPlaylist)
-
-                        Log.d(
-                            "Cloudberry",
-                            "Playlist change queued until track changes: " +
-                                    selectedPlaylist.name
-                        )
+                        Log.d("Cloudberry", "Playlist change queued until track changes: " + selectedPlaylist.name)
                     } else {
                         onPlayPlaylist(selectedPlaylist)
                     }
@@ -2123,13 +1589,9 @@ private fun CloudberryHome(
                 } else {
                     currentRuleName = matchingRule.name
 
-                    Log.w(
-                        "Cloudberry",
-                        "No playlists from rule '${matchingRule.name}' are loaded in Cloudberry."
-                    )
+                    Log.w("Cloudberry", "No playlists from rule '${matchingRule.name}' are loaded in Cloudberry.")
                 }
             }
-
             delay(5_000)
         }
     }
@@ -2150,10 +1612,7 @@ private fun CloudberryHome(
         }
     }
 
-    val transition = rememberInfiniteTransition(
-        label = "vinyl rotation"
-    )
-
+    val transition = rememberInfiniteTransition(label = "vinyl rotation")
     val rotation by transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
@@ -2169,9 +1628,9 @@ private fun CloudberryHome(
 
     val backgroundBrush = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFFFFFEFC),
-            Color(0xFFFFF5E8),
-            Color(0xFFFFD6A0)
+            AppColors.GradientStart,
+            AppColors.GradientMid,
+            AppColors.GradientEnd
         )
     )
 
@@ -2181,38 +1640,38 @@ private fun CloudberryHome(
 
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = Color(0xFFFFFBF5),
+                drawerContainerColor = AppColors.LightYellow,
                 modifier = Modifier.width(280.dp)
             ) {
                 Text(
-                    text = "cloudberry",
-                    fontSize = 27.sp,
+                    text = buildAnnotatedString {
+                        withStyle(
+                            SpanStyle(AppColors.TextBrown)
+                        ) {
+                            append("cloudberry")
+                        }
+
+                        withStyle(
+                            SpanStyle(AppColors.TextOrange)
+                        ) {
+                            append(".")
+                        }
+                    },
+                    fontSize = 20.sp,
+                    fontFamily = Merriweather,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF49382D),
-                    modifier = Modifier.padding(
-                        start = 24.dp,
-                        top = 32.dp,
-                        bottom = 8.dp
-                    )
+                    modifier = Modifier.padding(start = 24.dp, top = 32.dp,)
                 )
 
                 Text(
                     text = "your music, your time ‧₊ ♪˚⊹",
-                    fontSize = 13.sp,
-                    color = Color(0xFF8C7868),
-                    modifier = Modifier.padding(
-                        start = 24.dp,
-                        bottom = 28.dp
-                    )
+                    fontSize = 10.sp,
+                    fontFamily = Merriweather,
+                    color = AppColors.TextLightBrown,
+                    modifier = Modifier.padding(start = 24.dp, bottom = 28.dp)
                 )
 
-                HorizontalDivider(color = Color(0xFFEADFD2))
-
-                val pages = listOf(
-                    "home",
-                    "rules",
-                    "settings & info"
-                )
+                val pages = listOf("home", "rules", "settings & info")
 
                 pages.forEach { page ->
                     NavigationDrawerItem(
@@ -2228,10 +1687,7 @@ private fun CloudberryHome(
                                 drawerState.close()
                             }
 
-                            if (
-                                (page == "home" || page == "rules" || page == "add playlist rule") &&
-                                !isSpotifyLoggedIn
-                            ) {
+                            if ((page == "home" || page == "rules" || page == "add playlist rule") && !isSpotifyLoggedIn) {
                                 showSpotifyLoginDialog = true
                             } else {
                                 onPageSelected(page)
@@ -2239,9 +1695,9 @@ private fun CloudberryHome(
                         },
                         shape = RectangleShape,
                         colors = NavigationDrawerItemDefaults.colors(
-                            selectedContainerColor = Color(0xFFF4E5D4),
-                            selectedTextColor = Color(0xFF49382D),
-                            unselectedTextColor = Color(0xFF8C7868)
+                            selectedContainerColor = AppColors.LightMocha,
+                            selectedTextColor = AppColors.TextBrown,
+                            unselectedTextColor = AppColors.TextLightBrown
                         )
                     )
                 }
@@ -2254,7 +1710,6 @@ private fun CloudberryHome(
                 .fillMaxSize()
                 .background(Color.White)
         ) {
-            // Full-screen gradient background for the home page only.
             if (selectedPage == "home") {
                 Box(
                     modifier = Modifier
@@ -2263,7 +1718,6 @@ private fun CloudberryHome(
                 )
             }
 
-            // Main content stays above the background.
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -2282,7 +1736,6 @@ private fun CloudberryHome(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-
                         IconButton(
                             onClick = {
                                 scope.launch {
@@ -2307,47 +1760,46 @@ private fun CloudberryHome(
                                 Icon(
                                     imageVector = Icons.Default.AccountCircle,
                                     contentDescription = "open navigation menu",
-                                    tint = Color(0xFF795238),
+                                    tint = AppColors.Brown,
                                     modifier = Modifier.size(34.dp)
                                 )
                             }
                         }
 
-
                         Text(
-                            text = "cloudberry",
-                            fontSize = 27.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF49382D),
-                            letterSpacing = (-0.8).sp
+                            text = buildAnnotatedString {
+                                withStyle(
+                                    SpanStyle(color = AppColors.TextBrown)
+                                ) {
+                                    append("cloudberry")
+                                }
+                                withStyle(
+                                    SpanStyle(color = AppColors.TextOrange)
+                                ) {
+                                    append(".")
+                                }
+                            },
+                            fontSize = 20.sp,
+                            fontFamily = Merriweather,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
                 if (selectedPage == "home") {
-
                     Spacer(modifier = Modifier.weight(0.7f))
-
                     Text(
                         text = when {
-                            isSwitchingPlaylist ->
-                                "loading..."
-
-                            playlistStatus == "Loading playlist..." ->
-                                "loading playlist..."
-
-                            currentPlaylistName.isNotBlank() ->
-                                "from: $currentPlaylistName"
-
-                            else ->
-                                "from: playing outside playlist"
+                            isSwitchingPlaylist -> "loading..."
+                            playlistStatus == "loading playlist..." -> "loading playlist..."
+                            currentPlaylistName.isNotBlank() -> "from: $currentPlaylistName"
+                            else -> "from: playing outside playlist"
                         },
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
-                        color = Color(0xFF896B52),
+                        color = AppColors.TextLightBrown,
                         textAlign = TextAlign.Center
                     )
-
 
                     Text(
                         text = if (currentRuleName.isNotBlank()) {
@@ -2370,10 +1822,9 @@ private fun CloudberryHome(
                             "rule: loading..."
                         },
                         fontSize = 12.sp,
-                        color = Color(0xFF896B52),
+                        color = AppColors.TextLightBrown,
                         textAlign = TextAlign.Center
                     )
-
 
                     // vinyl record
                     Box(
@@ -2391,9 +1842,9 @@ private fun CloudberryHome(
                                 .background(
                                     Brush.radialGradient(
                                         colors = listOf(
-                                            Color(0xFF494949),
-                                            Color(0xFF242424),
-                                            Color(0xFF111111)
+                                            AppColors.GradientVinyl1,
+                                            AppColors.GradientVinyl2,
+                                            AppColors.GradientVinyl3
                                         )
                                     )
                                 ),
@@ -2421,30 +1872,30 @@ private fun CloudberryHome(
                                     .fillMaxWidth(0.58f)
                                     .aspectRatio(1f)
                                     .clip(CircleShape)
-                                    .background(Color(0xFFB9A18A)),
+                                    .background(AppColors.LightMocha),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (albumArtwork != null && hasCurrentTrack) {
-                                    androidx.compose.foundation.Image(
+                                    Image(
                                         bitmap = albumArtwork.asImageBitmap(),
                                         contentDescription = "current album artwork",
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .clip(CircleShape),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        contentScale = ContentScale.Crop
                                     )
                                 } else {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .background(Color(0xFFB9A18A)),
+                                            .background(AppColors.LightMocha),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Box(
                                             modifier = Modifier
                                                 .size(12.dp)
                                                 .clip(CircleShape)
-                                                .background(Color(0xFF6E5544))
+                                                .background(AppColors.Brown)
                                         )
                                     }
                                 }
@@ -2462,7 +1913,7 @@ private fun CloudberryHome(
                         },
                         fontSize = 21.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF49382D),
+                        color = AppColors.TextBrown,
                         textAlign = TextAlign.Center,
                         maxLines = 2
                     )
@@ -2474,17 +1925,16 @@ private fun CloudberryHome(
                             "start listening on spotify"
                         },
                         fontSize = 15.sp,
-                        color = Color(0xFF896B52),
+                        color = AppColors.TextLightBrown,
                         textAlign = TextAlign.Center,
                         maxLines = 1
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-// song progress and seeking
+                    // song progress and seeking
                     var seekPosition by remember { mutableFloatStateOf(0f) }
                     var isSeeking by remember { mutableStateOf(false) }
-
                     val duration = trackDurationMs.coerceAtLeast(0L)
                     val livePositionMs by produceState(
                         initialValue = currentPositionMs,
@@ -2496,16 +1946,12 @@ private fun CloudberryHome(
                     ) {
                         while (true) {
                             val elapsedMs = if (isPlaying && playbackPositionUpdatedAt > 0L) {
-                                android.os.SystemClock.elapsedRealtime() -
-                                        playbackPositionUpdatedAt
+                                android.os.SystemClock.elapsedRealtime() - playbackPositionUpdatedAt
                             } else {
                                 0L
                             }
 
-                            value = (
-                                    currentPositionMs + elapsedMs
-                                    ).coerceIn(0L, trackDurationMs.coerceAtLeast(0L))
-
+                            value = (currentPositionMs + elapsedMs).coerceIn(0L, trackDurationMs.coerceAtLeast(0L))
                             delay(250)
                         }
                     }
@@ -2525,7 +1971,6 @@ private fun CloudberryHome(
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-
                         Slider(
                             value = if (duration > 0L) {
                                 displayedPosition.toFloat().coerceIn(0f, duration.toFloat())
@@ -2545,9 +1990,7 @@ private fun CloudberryHome(
                             thumb = {
                                 SliderDefaults.Thumb(
                                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFF49382D)
-                                    ),
+                                    colors = SliderDefaults.colors(thumbColor = AppColors.TextBrown),
                                     thumbSize = androidx.compose.ui.unit.DpSize(
                                         width = 10.dp,
                                         height = 10.dp
@@ -2568,12 +2011,11 @@ private fun CloudberryHome(
                                     val fraction = sliderState.value
                                         .coerceIn(sliderState.valueRange.start, sliderState.valueRange.endInclusive)
                                         .let {
-                                            (it - sliderState.valueRange.start) /
-                                                    (sliderState.valueRange.endInclusive - sliderState.valueRange.start)
+                                            (it - sliderState.valueRange.start) / (sliderState.valueRange.endInclusive - sliderState.valueRange.start)
                                         }
 
                                     drawLine(
-                                        color = Color(0x66B9A18A),
+                                        color = AppColors.FadedBrown,
                                         start = Offset(0f, centerY),
                                         end = Offset(size.width, centerY),
                                         strokeWidth = thickness,
@@ -2581,7 +2023,7 @@ private fun CloudberryHome(
                                     )
 
                                     drawLine(
-                                        color = Color(0xFF49382D),
+                                        color = AppColors.TextBrown,
                                         start = Offset(0f, centerY),
                                         end = Offset(size.width * fraction, centerY),
                                         strokeWidth = thickness,
@@ -2601,13 +2043,13 @@ private fun CloudberryHome(
                             Text(
                                 text = formatPlaybackTime(displayedPosition),
                                 fontSize = 12.sp,
-                                color = Color(0xFF896B52)
+                                color = AppColors.TextLightBrown
                             )
 
                             Text(
                                 text = formatPlaybackTime(duration),
                                 fontSize = 12.sp,
-                                color = Color(0xFF896B52)
+                                color = AppColors.TextLightBrown
                             )
                         }
                     }
@@ -2628,9 +2070,9 @@ private fun CloudberryHome(
                                     imageVector = Icons.Default.KeyboardDoubleArrowLeft,
                                     contentDescription = "previous playlist",
                                     tint = if (hasCurrentTrack && !isSwitchingPlaylist) {
-                                        Color(0xFF49382D)
+                                        AppColors.TextBrown
                                     } else {
-                                        Color(0xFFB9A18A)
+                                        AppColors.FadedBrown
                                     },
                                     modifier = Modifier.size(28.dp)
                                 )
@@ -2645,7 +2087,7 @@ private fun CloudberryHome(
                             Icon(
                                 imageVector = Icons.Default.SkipPrevious,
                                 contentDescription = "previous track",
-                                tint = Color(0xFF49382D),
+                                tint = AppColors.TextBrown,
                                 modifier = Modifier.size(30.dp)
                             )
                         }
@@ -2657,7 +2099,7 @@ private fun CloudberryHome(
                             modifier = Modifier
                                 .size(62.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF49382D))
+                                .background(AppColors.TextBrown)
                         ) {
                             Icon(
                                 imageVector = if (isPlaying) {
@@ -2666,7 +2108,7 @@ private fun CloudberryHome(
                                     Icons.Default.PlayArrow
                                 },
                                 contentDescription = if (isPlaying) "pause" else "play",
-                                tint = Color(0xFFFFF8EF),
+                                tint = AppColors.LightYellow,
                                 modifier = Modifier.size(36.dp)
                             )
                         }
@@ -2679,7 +2121,7 @@ private fun CloudberryHome(
                             Icon(
                                 imageVector = Icons.Default.SkipNext,
                                 contentDescription = "next track",
-                                tint = Color(0xFF49382D),
+                                tint = AppColors.TextBrown,
                                 modifier = Modifier.size(30.dp)
                             )
                         }
@@ -2694,18 +2136,41 @@ private fun CloudberryHome(
                                     imageVector = Icons.Default.KeyboardDoubleArrowRight,
                                     contentDescription = "next playlist",
                                     tint = if (hasCurrentTrack && !isSwitchingPlaylist) {
-                                        Color(0xFF49382D)
+                                        AppColors.TextBrown
                                     } else {
-                                        Color(0xFFB9A18A)
+                                        AppColors.FadedBrown
                                     },
                                     modifier = Modifier.size(28.dp)
                                 )
                             }
                         }
                     }
-
                     Spacer(modifier = Modifier.weight(1.8f))
                 } else if (selectedPage == "settings & info") {
+                    val context = LocalContext.current
+                    val lifecycleOwner = LocalLifecycleOwner.current
+                    var hasLocationPermission by remember {
+                        mutableStateOf(context.checkSelfPermission(
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED || context.checkSelfPermission(
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED)
+                    }
+
+                    DisposableEffect(context, lifecycleOwner) {
+                        val observer = LifecycleEventObserver { _, event ->
+                            if (event == Lifecycle.Event.ON_RESUME) {
+                                hasLocationPermission = context.checkSelfPermission(
+                                    Manifest.permission.ACCESS_FINE_LOCATION
+                                ) == PackageManager.PERMISSION_GRANTED || context.checkSelfPermission(
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                ) == PackageManager.PERMISSION_GRANTED
+                            }
+                        }
+
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                    }
                     SettingsScreen(
                         modifier = Modifier.weight(1f),
                         isLoggedIn = isSpotifyLoggedIn,
@@ -2713,6 +2178,14 @@ private fun CloudberryHome(
                         isAuthorizing = isAuthorizing,
                         spotifyUsername = spotifyUsername,
                         spotifyProfilePicture = spotifyProfilePicture,
+                        hasLocationPermission = hasLocationPermission,
+                        onOpenLocationSettings = {
+                            val intent = Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null)
+                            )
+                            context.startActivity(intent)
+                        },
                         weatherCity = if (isSpotifyLoggedIn) weatherCity else "",
                         weatherCountry = if (isSpotifyLoggedIn) weatherCountry else "",
                         weatherTemperature = if (isSpotifyLoggedIn) weatherTemperature else null,
@@ -2749,11 +2222,8 @@ private fun CloudberryHome(
                             val updatedRules = savedRules.filterNot {
                                 it.id == ruleToRemove.id
                             }
-
                             savedRules = updatedRules
-
                             val token = spotifyAccessToken
-
                             if (rulesLoaded && !token.isNullOrBlank()) {
                                 scope.launch {
                                     try {
@@ -2790,10 +2260,8 @@ private fun CloudberryHome(
                             onPageSelected("rules")
                         },
                         onRequestPlaylistAccess = onRequestPlaylistAccess,
-
                         onSaveRule = { savedRule ->
                             val isEditingRule = ruleBeingEdited != null
-
                             val updatedRules = if (isEditingRule) {
                                 savedRules.map { existingRule ->
                                     if (existingRule.id == ruleBeingEdited!!.id) {
@@ -2805,11 +2273,8 @@ private fun CloudberryHome(
                             } else {
                                 savedRules + savedRule
                             }
-
                             savedRules = updatedRules
-
                             val token = spotifyAccessToken
-
                             if (rulesLoaded && !token.isNullOrBlank()) {
                                 scope.launch {
                                     try {
@@ -2826,15 +2291,10 @@ private fun CloudberryHome(
                                             showRestartDialog = true
                                         }
                                     } catch (error: Exception) {
-                                        Log.e(
-                                            "Cloudberry",
-                                            "Failed to save playlist rules to backend",
-                                            error
-                                        )
+                                        Log.e("Cloudberry", "Failed to save playlist rules to backend", error)
                                     }
                                 }
                             }
-
                             ruleBeingEdited = null
                             onPageSelected("rules")
                         }
@@ -2846,14 +2306,8 @@ private fun CloudberryHome(
         if (showSpotifyLoginDialog) {
             AlertDialog(
                 onDismissRequest = {},
-                title = {
-                    Text("spotify login required")
-                },
-                text = {
-                    Text(
-                        "please log in to spotify before using the app. make sure you have spotify premium for the app to work properly ^-^"
-                    )
-                },
+                title = { Text("spotify login required") },
+                text = { Text("please log in to spotify before using the app. make sure you have spotify premium for the app to work properly ^-^") },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -2861,15 +2315,15 @@ private fun CloudberryHome(
                             onLoginLogout()
                         },
                         colors = ButtonDefaults.textButtonColors(
-                            contentColor = Color(0xFF896B52)
+                            contentColor = AppColors.TextLightBrown
                         )
                     ) {
                         Text("login")
                     }
                 },
-                containerColor = Color(0xFFFFFBF5),
-                titleContentColor = Color(0xFF49382D),
-                textContentColor = Color(0xFF896B52)
+                containerColor = AppColors.LightYellow,
+                titleContentColor = AppColors.TextBrown,
+                textContentColor = AppColors.TextLightBrown
             )
         }
     }
@@ -2885,15 +2339,7 @@ private fun detectSeason(currentTime: Calendar): String {
     }
 }
 
-
-
-private fun matchesPlaylistRule(
-    rule: PlaylistRule,
-    detectedSeason: String,
-    currentTime: Calendar,
-    isRaining: Boolean
-): Boolean {
-
+private fun matchesPlaylistRule(rule: PlaylistRule, detectedSeason: String, currentTime: Calendar, isRaining: Boolean): Boolean {
     // When it is raining, non-rain rules must never match.
     if (isRaining && !rule.rainEnabled) {
         return false
@@ -2920,9 +2366,7 @@ private fun matchesPlaylistRule(
 
     val hour = currentTime.get(Calendar.HOUR_OF_DAY)
     val minute = currentTime.get(Calendar.MINUTE)
-
-    val currentTimeIndex =
-        hour * 2 + if (minute >= 30) 1 else 0
+    val currentTimeIndex = hour * 2 + if (minute >= 30) 1 else 0
 
     val timeMatches = rule.timeRanges.any { range ->
         val start = range.first
@@ -2965,8 +2409,7 @@ private suspend fun waitForBackend(): Boolean {
                     ""
                 }
 
-                statusCode in 200..299 &&
-                        response.contains("\"status\":\"healthy\"")
+                statusCode in 200..299 && response.contains("\"status\":\"healthy\"")
             } catch (e: Exception) {
                 Log.d("CloudberryBackend", "Backend is not ready yet: ${e.message}")
                 false
@@ -2979,101 +2422,13 @@ private suspend fun waitForBackend(): Boolean {
             Log.d("CloudberryBackend", "Backend is ready")
             return true
         }
-
         delay(3_000)
     }
 }
-
-private suspend fun logRulePlaylistOrderAndTrackCounts(
-    rule: PlaylistRule,
-    accessToken: String
-) {
-    val tag = "CloudberryPlaylist"
-
-    // Keep only playlists selected in this rule, using their IDs.
-    val selectedIds = rule.playlists.map { it.id }.toSet()
-
-    val orderedPlaylists = rule.playlistOrder
-        .filter { it.id in selectedIds }
-        .distinctBy { it.id }
-        .let { ordered ->
-            // Fall back to the selected playlist list if custom order is empty.
-            val baseOrder = if (ordered.isNotEmpty()) {
-                ordered
-            } else {
-                rule.playlists.distinctBy { it.id }
-            }
-
-            if (rule.randomOrder) baseOrder.shuffled() else baseOrder
-        }
-
-
-    // Fetch each playlist's track count from Spotify on a background thread.
-    withContext(Dispatchers.IO) {
-        for ((index, playlist) in orderedPlaylists.withIndex()) {
-            try {
-                val url = java.net.URL(
-                    "https://api.spotify.com/v1/playlists/${playlist.id}?fields=id,name,items(total)"
-                )
-
-                val connection =
-                    url.openConnection() as java.net.HttpURLConnection
-
-                try {
-                    connection.requestMethod = "GET"
-                    connection.setRequestProperty(
-                        "Authorization",
-                        "Bearer $accessToken"
-                    )
-                    connection.setRequestProperty("Accept", "application/json")
-                    connection.connectTimeout = 15000
-                    connection.readTimeout = 15000
-
-                    val status = connection.responseCode
-                    val response = (
-                            if (status in 200..299) connection.inputStream
-                            else connection.errorStream
-                            )?.bufferedReader()?.use { it.readText() }.orEmpty()
-
-                    if (status in 200..299) {
-                        val json =
-                            com.google.gson.JsonParser.parseString(response).asJsonObject
-
-                        val totalTracks = json
-                            .getAsJsonObject("items")
-                            ?.get("total")
-                            ?.asInt
-
-                        android.util.Log.d(
-                            tag,
-                            "Track count ${index + 1}/${orderedPlaylists.size}: " +
-                                    "${playlist.name} = ${totalTracks ?: "unknown"} tracks"
-                        )
-                    } else {
-                        android.util.Log.e(
-                            tag,
-                            "Failed to fetch ${playlist.name}: HTTP $status | $response"
-                        )
-                    }
-                } finally {
-                    connection.disconnect()
-                }
-            } catch (e: Exception) {
-                android.util.Log.e(
-                    tag,
-                    "Error fetching track count for ${playlist.name}",
-                    e
-                )
-            }
-        }
-    }
-}
-
 
 private fun formatPlaybackTime(milliseconds: Long): String {
     val totalSeconds = milliseconds / 1000
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
-
     return "%d:%02d".format(minutes, seconds)
 }

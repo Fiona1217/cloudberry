@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,9 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.HorizontalDivider
 
-private val SpotifyGreen = Color(0xFF1DB954)
-private val LogoutRed = Color(0xFFD93025)
-
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
@@ -53,6 +51,8 @@ fun SettingsScreen(
     isAuthorizing: Boolean,
     spotifyUsername: String = "",
     spotifyProfilePicture: Bitmap? = null,
+    hasLocationPermission: Boolean = true,
+    onOpenLocationSettings: () -> Unit = {},
     weatherCity: String = "",
     weatherCountry: String = "",
     weatherTemperature: Double? = null,
@@ -63,7 +63,6 @@ fun SettingsScreen(
     currentTime: String = "",
     onLoginLogout: () -> Unit
 ) {
-    val ruleText = Color(0xFF49382D)
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -77,7 +76,7 @@ fun SettingsScreen(
             text = "settings & info",
             fontSize = 22.sp,
             fontWeight = FontWeight.SemiBold,
-            color = ruleText
+            color = AppColors.TextBrown
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -91,15 +90,13 @@ fun SettingsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-//                    .padding(10.dp)
             ) {
-                // Row 2: Icon/PFP | Account details | Action button
+                // Icon/PFP | Account details | Action button
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Column 1: Profile picture or Spotify music icon
                     Box(
                         modifier = Modifier
                             .size(48.dp)
@@ -118,13 +115,12 @@ fun SettingsScreen(
                             androidx.compose.material3.Icon(
                                 imageVector = Icons.Default.MusicNote,
                                 contentDescription = "Spotify",
-                                tint = SpotifyGreen,
+                                tint = AppColors.SpotifyGreen,
                                 modifier = Modifier.size(28.dp)
                             )
                         }
                     }
 
-                    // Column 2: Username and status
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.Center
@@ -151,20 +147,16 @@ fun SettingsScreen(
                         )
                     }
 
-                    // Column 3: Login or logout button
                     if (isLoggedIn) {
                         Button(
                             onClick = { showLogoutDialog = true },
                             enabled = !isConnecting && !isAuthorizing,
                             colors = buttonColors(
-                                containerColor = LogoutRed,
+                                containerColor = AppColors.Red,
                                 contentColor = Color.White
                             ),
                             modifier = Modifier.height(40.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                horizontal = 12.dp,
-                                vertical = 0.dp
-                            )
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                         ) {
                             Text(
                                 text = "logout",
@@ -177,22 +169,19 @@ fun SettingsScreen(
                             onClick = onLoginLogout,
                             enabled = !isConnecting && !isAuthorizing,
                             colors = buttonColors(
-                                containerColor = Color(0xFF49382D),
+                                containerColor = AppColors.TextBrown,
                                 contentColor = Color.White
                             ),
                             modifier = Modifier.height(40.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                horizontal = 12.dp,
-                                vertical = 0.dp
-                            )
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                         ) {
                             Text(
                                 text = when {
-                                    isConnecting -> "Connecting..."
-                                    isAuthorizing -> "Opening..."
+                                    isConnecting -> "connecting..."
+                                    isAuthorizing -> "opening..."
                                     else -> "login"
                                 },
-                                color = SpotifyGreen,
+                                color = AppColors.SpotifyGreen,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1
                             )
@@ -208,7 +197,7 @@ fun SettingsScreen(
             text = "current conditions",
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
-            color = ruleText,
+            color = AppColors.TextBrown,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 12.dp)
@@ -234,19 +223,17 @@ fun SettingsScreen(
                     Text(
                         text = "weather",
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF896B52)
+                        color = AppColors.TextLightBrown
                     )
 
                     Text(
                         text = when {
-                            weatherTemperature != null &&
-                                    weatherCondition.isNotBlank() -> {
+                            weatherTemperature != null && weatherCondition.isNotBlank() -> {
                                 "$weatherCondition · ${weatherTemperature}°C"
                             }
-
                             else -> weatherStatus
                         },
-                        color = Color(0xFF896B52),
+                        color = AppColors.TextLightBrown,
                         fontSize = 14.sp
                     )
 
@@ -255,7 +242,7 @@ fun SettingsScreen(
                             text = listOf(weatherCity, weatherCountry)
                                 .filter { it.isNotBlank() }
                                 .joinToString(", "),
-                            color = Color(0xFF896B52),
+                            color = AppColors.TextLightBrown,
                             fontSize = 12.sp
                         )
                     }
@@ -267,14 +254,44 @@ fun SettingsScreen(
                             } else {
                                 "no rain detected"
                             },
-                            color = Color(0xFF896B52),
+                            color = AppColors.TextLightBrown,
                             fontSize = 12.sp
                         )
+                    }
+                    if (!hasLocationPermission) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Location permission is needed for rain rules to work.",
+                                color = AppColors.TextLightBrown,
+                                fontSize = 12.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            Button(
+                                onClick = onOpenLocationSettings,
+                                colors = buttonColors(
+                                    containerColor = AppColors.TextBrown,
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Text(
+                                    text = "open settings",
+                                    fontSize = 11.sp,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                 }
 
                 HorizontalDivider(
-                    color = Color(0xFFEADFD2)
+                    color = AppColors.LightMocha
                 )
 
                 // Season
@@ -282,18 +299,18 @@ fun SettingsScreen(
                     Text(
                         text = "season",
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF896B52)
+                        color = AppColors.TextLightBrown
                     )
 
                     Text(
                         text = season.ifBlank { "unavailable" },
-                        color = Color(0xFF896B52),
+                        color = AppColors.TextLightBrown,
                         fontSize = 14.sp
                     )
                 }
 
                 HorizontalDivider(
-                    color = Color(0xFFEADFD2)
+                    color = AppColors.LightMocha
                 )
 
                 // Local time
@@ -301,12 +318,12 @@ fun SettingsScreen(
                     Text(
                         text = "local time",
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF896B52)
+                        color = AppColors.TextLightBrown
                     )
 
                     Text(
                         text = currentTime.ifBlank { "--:--" },
-                        color = Color(0xFF896B52),
+                        color = AppColors.TextLightBrown,
                         fontSize = 14.sp
                     )
                 }
@@ -318,6 +335,7 @@ fun SettingsScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
+            containerColor = AppColors.GradientStart,
             title = {
                 Text(
                     text = "log out of spotify?",
@@ -334,7 +352,7 @@ fun SettingsScreen(
                         onLoginLogout()
                     },
                     colors = buttonColors(
-                        containerColor = LogoutRed,
+                        containerColor = AppColors.Red,
                         contentColor = Color.White
                     )
                 ) {

@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -43,7 +41,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -83,12 +80,8 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
-
-private val RuleBackground = Color(0xFFFFFEFC)
-private val RuleText = Color(0xFF49382D)
-private val RuleMuted = Color(0xFF896B52)
-private val RuleBorder = Color(0xFFEADFD2)
-private val RuleButton = Color(0xFFF4E5D4)
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 @Composable
 fun AddPlaylistRuleScreen(
@@ -100,7 +93,6 @@ fun AddPlaylistRuleScreen(
     onRequestPlaylistAccess: () -> Unit,
     onSaveRule: (PlaylistRule) -> Unit
 ) {
-
     var showExitConfirmation by remember(initialRule?.id) { mutableStateOf(false) }
     var showPlaylistPicker by remember(initialRule?.id) { mutableStateOf(false) }
     var selectedPlaylists by remember(initialRule?.id) { mutableStateOf(initialRule?.playlists ?: emptyList()) }
@@ -127,19 +119,14 @@ fun AddPlaylistRuleScreen(
     var isTimeWheelScrolling by remember(initialRule?.id) { mutableStateOf(false) }
     var showAllSelectedPlaylists by remember(initialRule?.id) { mutableStateOf(false) }
     val sortedPlaylists = playlists.sortedBy { playlist -> selectedPlaylists.contains(playlist) }
-
     val scrollState = rememberScrollState()
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-
-    var ruleName by remember(initialRule?.id) {
-        mutableStateOf(initialRule?.name ?: "")
-    }
+    var ruleName by remember(initialRule?.id) { mutableStateOf(initialRule?.name ?: "") }
 
     BackHandler(enabled = !showExitConfirmation) {
         showExitConfirmation = true
     }
-
 
     LaunchedEffect(validationMessage) {
         if (validationMessage != null) {
@@ -166,23 +153,21 @@ fun AddPlaylistRuleScreen(
                 }
             ) {
                 Icon(
-                    modifier = Modifier
-                        .offset(x = (-12).dp),
-                    imageVector = Icons.Default.ArrowBack,
+                    modifier = Modifier.offset(x = (-12).dp),
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Go back",
-                    tint = RuleText
+                    tint = AppColors.TextBrown
                 )
             }
 
             Text(
-                modifier = Modifier
-                    .offset(x = (9).dp),
+                modifier = Modifier.offset(x = (9).dp),
                 text = if (initialRule == null) {
                     "add playlist rule"
                 } else {
                     "edit playlist rule"
                 },
-                color = RuleText,
+                color = AppColors.TextBrown,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold
             )
@@ -193,39 +178,34 @@ fun AddPlaylistRuleScreen(
         Text(
             text = "rule name",
             modifier = Modifier.fillMaxWidth(),
-            color = RuleMuted,
+            color = AppColors.TextLightBrown,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold
         )
         OutlinedTextField(
             value = ruleName,
             onValueChange = { ruleName = it },
-            modifier = Modifier
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             placeholder = {
                 Text(
                     text = "enter a name for this rule",
-                    color = Color(0xFFB9A18A),
+                    color = AppColors.FadedBrown,
                     fontSize = 14.sp
                 )
             },
             singleLine = true,
             shape = RoundedCornerShape(10.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color(0xFF49382D),
-                unfocusedBorderColor = Color(0xFFD6C2AE),
-                focusedTextColor = Color(0xFF49382D),
-                unfocusedTextColor = Color(0xFF49382D),
-                cursorColor = Color(0xFF49382D)
+                focusedBorderColor = AppColors.Brown,
+                unfocusedBorderColor = AppColors.TextLightBrown,
+                focusedTextColor = AppColors.TextBrown,
+                unfocusedTextColor = AppColors.TextBrown,
+                cursorColor = AppColors.TextBrown
             ),
-            keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Done
-            ),
-            keyboardActions = KeyboardActions(
-                onDone = {
-                    focusManager.clearFocus()
-                }
-            )
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = {
+                focusManager.clearFocus()
+            })
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -233,7 +213,7 @@ fun AddPlaylistRuleScreen(
         Text(
             text = "choose playlists",
             modifier = Modifier.fillMaxWidth(),
-            color = RuleMuted,
+            color = AppColors.TextLightBrown,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold
         )
@@ -253,8 +233,8 @@ fun AddPlaylistRuleScreen(
                 .height(48.dp),
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = RuleButton,
-                contentColor = RuleText
+                containerColor = AppColors.FadedBrown,
+                contentColor = AppColors.TextBrown
             )
         ) {
             Text(
@@ -266,9 +246,8 @@ fun AddPlaylistRuleScreen(
         if (selectedPlaylists.isEmpty()) {
             Text(
                 text = "no playlists selected",
-                modifier = Modifier
-                    .fillMaxWidth(),
-                color = RuleMuted,
+                modifier = Modifier.fillMaxWidth(),
+                color = AppColors.TextLightBrown,
                 fontSize = 12.sp
             )
         } else {
@@ -294,7 +273,6 @@ fun AddPlaylistRuleScreen(
                         ),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-
                     items(
                         items = visiblePlaylists,
                         key = { it.id }
@@ -317,7 +295,7 @@ fun AddPlaylistRuleScreen(
                             Text(
                                 text = playlist.name,
                                 modifier = Modifier.weight(1f),
-                                color = RuleText,
+                                color = AppColors.TextBrown,
                                 fontSize = 14.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -328,17 +306,15 @@ fun AddPlaylistRuleScreen(
                                     selectedPlaylists = selectedPlaylists.filterNot {
                                         it.id == playlist.id
                                     }
-
-                                    playlistOrder =
-                                        playlistOrder.filterNot {
-                                            it.id == playlist.id
-                                        }
+                                    playlistOrder = playlistOrder.filterNot {
+                                        it.id == playlist.id
+                                    }
                                 }
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Remove ${playlist.name}",
-                                    tint = RuleMuted
+                                    tint = AppColors.TextLightBrown
                                 )
                             }
                         }
@@ -351,8 +327,7 @@ fun AddPlaylistRuleScreen(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .clickable {
-                                showAllSelectedPlaylists =
-                                    !showAllSelectedPlaylists
+                                showAllSelectedPlaylists = !showAllSelectedPlaylists
                             }
                             .padding(vertical = 10.dp),
                         horizontalArrangement = Arrangement.Center,
@@ -364,38 +339,36 @@ fun AddPlaylistRuleScreen(
                             } else {
                                 "+$hiddenCount more playlist${if (hiddenCount == 1) "" else "s"}"
                             },
-                            color = RuleMuted,
+                            color = AppColors.TextLightBrown,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
-
-    }
+        }
+        
         if (playlistOrder.size >= 2) {
             Spacer(modifier = Modifier.height(25.dp))
 
             Text(
                 text = "sort playlists",
                 modifier = Modifier.fillMaxWidth(),
-                color = RuleMuted,
+                color = AppColors.TextLightBrown,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold
             )
-
-
+            
             if (selectedPlaylists.isEmpty()) {
                 Text(
                     text = "",
                     modifier = Modifier.fillMaxWidth(),
-                    color = RuleMuted,
+                    color = AppColors.TextLightBrown,
                     fontSize = 12.sp
                 )
             } else {
                 if(!randomSortEnabled){
                     val lazyListState = rememberLazyListState()
-
                     val reorderState = rememberReorderableLazyListState(
                         lazyListState = lazyListState
                     ) { from, to ->
@@ -409,7 +382,7 @@ fun AddPlaylistRuleScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 8.dp),
-                        color = RuleMuted,
+                        color = AppColors.TextLightBrown,
                         fontSize = 12.sp
                     )
 
@@ -433,8 +406,8 @@ fun AddPlaylistRuleScreen(
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(
-                                            if (isDragging) RuleButton
-                                            else RuleBackground
+                                            if (isDragging) AppColors.FadedBrown
+                                            else AppColors.GradientStart
                                         )
                                         .padding(
                                             horizontal = 10.dp,
@@ -452,7 +425,7 @@ fun AddPlaylistRuleScreen(
                                     Text(
                                         text = playlist.name,
                                         modifier = Modifier.weight(1f),
-                                        color = RuleText,
+                                        color = AppColors.TextBrown,
                                         fontSize = 14.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -462,7 +435,7 @@ fun AddPlaylistRuleScreen(
                                         imageVector = Icons.Default.DragHandle,
                                         contentDescription =
                                             "Drag to reorder ${playlist.name}",
-                                        tint = RuleMuted,
+                                        tint = AppColors.TextLightBrown,
                                         modifier = Modifier.draggableHandle()
                                     )
                                 }
@@ -481,7 +454,7 @@ fun AddPlaylistRuleScreen(
 
                     Text(
                         text = "shuffle",
-                        color = RuleText,
+                        color = AppColors.TextBrown,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -490,33 +463,33 @@ fun AddPlaylistRuleScreen(
                         checked = randomSortEnabled,
                         onCheckedChange = { randomSortEnabled = it },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = RuleBackground,
-                            checkedTrackColor = RuleMuted,
-                            uncheckedThumbColor = RuleBackground,
-                            uncheckedTrackColor = RuleBorder,
-                            uncheckedBorderColor = RuleMuted
+                            checkedThumbColor = AppColors.GradientStart,
+                            checkedTrackColor = AppColors.TextLightBrown,
+                            uncheckedThumbColor = AppColors.GradientStart,
+                            uncheckedTrackColor = AppColors.FadedBrown,
+                            uncheckedBorderColor = AppColors.TextLightBrown
                         )
                     )
                 }
             }
         }
-
-
-
+        
         Spacer(modifier = Modifier.height(25.dp))
 
         Text(
             text = "condition options",
             modifier = Modifier.fillMaxWidth(),
-            color = RuleMuted,
+            color = AppColors.TextLightBrown,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold
         )
+        
         val triggerOptions = listOf(
             "season only",
             "time only",
             "season and time"
         )
+        
         triggerOptions.forEach { option ->
             Row(
                 modifier = Modifier
@@ -544,13 +517,13 @@ fun AddPlaylistRuleScreen(
                         }
                     },
                     colors = RadioButtonDefaults.colors(
-                        selectedColor = RuleMuted,
+                        selectedColor = AppColors.TextLightBrown,
                     )
                 )
 
                 Text(
                     text = option,
-                    color = RuleText,
+                    color = AppColors.TextBrown,
                     fontSize = 14.sp
                 )
             }
@@ -580,8 +553,8 @@ fun AddPlaylistRuleScreen(
                         ),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = RuleText,
-                            contentColor = RuleBackground
+                            containerColor = AppColors.TextBrown,
+                            contentColor = AppColors.GradientStart
                         )
                     ) {
                         Text(
@@ -601,7 +574,7 @@ fun AddPlaylistRuleScreen(
                         ) {
                             Text(
                                 text = selectedSeason,
-                                color = RuleText,
+                                color = AppColors.TextBrown,
                                 fontSize = 12.sp,
                             )
 
@@ -614,7 +587,7 @@ fun AddPlaylistRuleScreen(
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Remove selected season",
-                                    tint = RuleMuted,
+                                    tint = AppColors.TextLightBrown,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -646,14 +619,11 @@ fun AddPlaylistRuleScreen(
                             showTimePicker = true
                         },
                         modifier = Modifier.height(36.dp),
-                        contentPadding = PaddingValues(
-                            horizontal = 12.dp,
-                            vertical = 0.dp
-                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = RuleText,
-                            contentColor = RuleBackground
+                            containerColor = AppColors.TextBrown,
+                            contentColor = AppColors.GradientStart
                         )
                     ) {
                         Text(
@@ -676,7 +646,7 @@ fun AddPlaylistRuleScreen(
                                     "${formatTime(range.first)} – ${formatTime(range.second)}"
                                 },
                                 modifier = Modifier.weight(1f, fill = false),
-                                color = RuleText,
+                                color = AppColors.TextBrown,
                                 fontSize = 12.sp
                             )
 
@@ -689,7 +659,7 @@ fun AddPlaylistRuleScreen(
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Remove selected time range",
-                                    tint = RuleMuted,
+                                    tint = AppColors.TextLightBrown,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -697,7 +667,6 @@ fun AddPlaylistRuleScreen(
                     }
                 }
             }
-
         }
         Column(
             modifier = Modifier
@@ -711,7 +680,7 @@ fun AddPlaylistRuleScreen(
             ) {
                 Text(
                     text = "rain",
-                    color = RuleText,
+                    color = AppColors.TextBrown,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -725,11 +694,11 @@ fun AddPlaylistRuleScreen(
                         }
                     },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = RuleBackground,
-                        checkedTrackColor = RuleMuted,
-                        uncheckedThumbColor = RuleBackground,
-                        uncheckedTrackColor = RuleBorder,
-                        uncheckedBorderColor = RuleMuted
+                        checkedThumbColor = AppColors.GradientStart,
+                        checkedTrackColor = AppColors.TextLightBrown,
+                        uncheckedThumbColor = AppColors.GradientStart,
+                        uncheckedTrackColor = AppColors.FadedBrown,
+                        uncheckedBorderColor = AppColors.TextLightBrown
                     )
                 )
             }
@@ -746,39 +715,29 @@ fun AddPlaylistRuleScreen(
                     selectedPlaylists.isEmpty() ->
                         "please select at least one playlist."
 
-                    triggerOption == "season only" &&
-                            selectedSeason.isBlank() &&
-                            !(rainEnabled && rainScope == "all") ->
+                    triggerOption == "season only" && selectedSeason.isBlank() && !(rainEnabled && rainScope == "all") ->
                         "please select a season."
 
-                    triggerOption == "time only" &&
-                            selectedTimeRanges.isEmpty() ->
+                    triggerOption == "time only" && selectedTimeRanges.isEmpty() ->
                         "please add a time range."
 
-                    triggerOption == "season and time" &&
-                            selectedSeason.isBlank() &&
-                            !(rainEnabled && rainScope == "all") ->
+                    triggerOption == "season and time" && selectedSeason.isBlank() && !(rainEnabled && rainScope == "all") ->
                         "please select a season."
 
-                    triggerOption == "season and time" &&
-                            selectedTimeRanges.isEmpty() ->
+                    triggerOption == "season and time" && selectedTimeRanges.isEmpty() ->
                         "please add a time range."
 
-                    rainEnabled &&
-                            rainScope == "season" &&
-                            selectedSeason.isBlank() ->
+                    rainEnabled && rainScope == "season" && selectedSeason.isBlank() ->
                         "please select a season for rain."
 
-                    rainEnabled &&
-                            rainScope !in listOf("season", "all") ->
+                    rainEnabled && rainScope !in listOf("season", "all") ->
                         "please choose a valid rain option."
 
                     else -> null
                 }
 
                 val candidateRule = PlaylistRule(
-                    id = initialRule?.id
-                        ?: java.util.UUID.randomUUID().toString(),
+                    id = initialRule?.id ?: java.util.UUID.randomUUID().toString(),
                     name = ruleName.trim(),
                     playlists = selectedPlaylists,
                     playlistOrder = playlistOrder,
@@ -795,30 +754,22 @@ fun AddPlaylistRuleScreen(
                 )
 
                 val duplicateNameRule = existingRules.firstOrNull { existing ->
-                    existing.id != candidateRule.id &&
-                            existing.name.trim().equals(
-                                candidateRule.name,
-                                ignoreCase = true
-                            )
+                    existing.id != candidateRule.id && existing.name.trim().equals(
+                        candidateRule.name, ignoreCase = true
+                    )
                 }
 
                 val duplicateConditionsRule = existingRules.firstOrNull { existing ->
-                    existing.id != candidateRule.id &&
-                            hasSameRuleConditions(existing, candidateRule)
+                    existing.id != candidateRule.id && hasSameRuleConditions(existing, candidateRule)
                 }
 
                 val duplicateMessage = when {
-                    duplicateNameRule != null ->
-                        "rule name conflicts with \"${duplicateNameRule.name}\"."
-
-                    duplicateConditionsRule != null ->
-                        "conditions duplicate \"${duplicateConditionsRule.name}\"."
-
+                    duplicateNameRule != null -> "rule name conflicts with \"${duplicateNameRule.name}\"."
+                    duplicateConditionsRule != null -> "conditions duplicate \"${duplicateConditionsRule.name}\"."
                     else -> null
                 }
 
                 val message = basicMessage ?: duplicateMessage
-
                 validationMessage = message
 
                 if (message == null) {
@@ -836,12 +787,7 @@ fun AddPlaylistRuleScreen(
 
                     if (vibrator.hasVibrator()) {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            vibrator.vibrate(
-                                VibrationEffect.createOneShot(
-                                    150,
-                                    VibrationEffect.DEFAULT_AMPLITUDE
-                                )
-                            )
+                            vibrator.vibrate(VibrationEffect.createOneShot(150, VibrationEffect.DEFAULT_AMPLITUDE))
                         } else {
                             @Suppress("DEPRECATION")
                             vibrator.vibrate(150)
@@ -854,8 +800,8 @@ fun AddPlaylistRuleScreen(
                 .height(48.dp),
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = RuleText,
-                contentColor = RuleBackground
+                containerColor = AppColors.TextBrown,
+                contentColor = AppColors.GradientStart
             )
         ) {
             Text(
@@ -875,7 +821,7 @@ fun AddPlaylistRuleScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
-                color = Color(0xFFB34736),
+                color = AppColors.Red,
                 fontSize = 12.sp
             )
         }
@@ -883,25 +829,25 @@ fun AddPlaylistRuleScreen(
         if (showRuleSuccess) {
             AlertDialog(
                 onDismissRequest = { showRuleSuccess = false },
-                containerColor = RuleBackground,
+                containerColor = AppColors.GradientStart,
                 title = {
                     Text(
                         text = "rule is valid!",
-                        color = RuleText,
+                        color = AppColors.TextBrown,
                         fontWeight = FontWeight.SemiBold
                     )
                 },
                 text = {
                     Text(
                         text = "Your playlist rule passed validation. Saving it will be the next step.",
-                        color = RuleMuted
+                        color = AppColors.TextLightBrown
                     )
                 },
                 confirmButton = {
                     TextButton(
                         onClick = { showRuleSuccess = false }
                     ) {
-                        Text("okay", color = RuleText)
+                        Text("okay", color = AppColors.TextBrown)
                     }
                 }
             )
@@ -910,11 +856,11 @@ fun AddPlaylistRuleScreen(
         if (showTimePicker) {
             AlertDialog(
                 onDismissRequest = { showTimePicker = false },
-                containerColor = RuleBackground,
+                containerColor = AppColors.GradientStart,
                 title = {
                     Text(
                         text = "choose time range",
-                        color = RuleText,
+                        color = AppColors.TextBrown,
                         fontWeight = FontWeight.SemiBold
                     )
                 },
@@ -929,14 +875,14 @@ fun AddPlaylistRuleScreen(
                         ) {
                             Text(
                                 text = "start time",
-                                color = RuleMuted,
+                                color = AppColors.TextLightBrown,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
 
                             Text(
                                 text = "end time",
-                                color = RuleMuted,
+                                color = AppColors.TextLightBrown,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -950,22 +896,14 @@ fun AddPlaylistRuleScreen(
                         ) {
                             TimeWheel(
                                 selectedIndex = startTimeIndex,
-                                onSelectedIndexChange = {
-                                    startTimeIndex = it
-                                },
-                                onScrollStateChange = { isScrolling ->
-                                    isTimeWheelScrolling = isScrolling
-                                }
+                                onSelectedIndexChange = { startTimeIndex = it },
+                                onScrollStateChange = { isScrolling -> isTimeWheelScrolling = isScrolling }
                             )
 
                             TimeWheel(
                                 selectedIndex = endTimeIndex,
-                                onSelectedIndexChange = {
-                                    endTimeIndex = it
-                                },
-                                onScrollStateChange = { isScrolling ->
-                                    isTimeWheelScrolling = isScrolling
-                                }
+                                onSelectedIndexChange = { endTimeIndex = it },
+                                onScrollStateChange = { isScrolling -> isTimeWheelScrolling = isScrolling }
                             )
                         }
 
@@ -973,7 +911,7 @@ fun AddPlaylistRuleScreen(
 
                         Text(
                             text = "${formatTime(startTimeIndex)} – ${formatTime(endTimeIndex)}",
-                            color = RuleText,
+                            color = AppColors.TextBrown,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -982,7 +920,7 @@ fun AddPlaylistRuleScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "start and end times are the same",
-                                color = RuleMuted,
+                                color = AppColors.TextLightBrown,
                                 fontSize = 11.sp
                             )
                         }
@@ -999,9 +937,9 @@ fun AddPlaylistRuleScreen(
                         Text(
                             text = "add",
                             color = if (isTimeWheelScrolling) {
-                                RuleMuted.copy(alpha = 0.4f)
+                                AppColors.TextLightBrown.copy(alpha = 0.4f)
                             } else {
-                                RuleText
+                                AppColors.TextBrown
                             }
                         )
                     }
@@ -1016,9 +954,9 @@ fun AddPlaylistRuleScreen(
                         Text(
                             text = "cancel",
                             color = if (isTimeWheelScrolling) {
-                                RuleMuted.copy(alpha = 0.4f)
+                                AppColors.TextLightBrown.copy(alpha = 0.4f)
                             } else {
-                                RuleMuted
+                                AppColors.TextLightBrown
                             }
                         )
                     }
@@ -1038,11 +976,11 @@ fun AddPlaylistRuleScreen(
                 onDismissRequest = {
                     showSeasonPicker = false
                 },
-                containerColor = RuleBackground,
+                containerColor = AppColors.GradientStart,
                 title = {
                     Text(
                         text = "choose season",
-                        color = RuleText,
+                        color = AppColors.TextBrown,
                         fontWeight = FontWeight.SemiBold
                     )
                 },
@@ -1067,13 +1005,12 @@ fun AddPlaylistRuleScreen(
                                         showSeasonPicker = false
                                     },
                                     colors = RadioButtonDefaults.colors(
-                                        selectedColor = RuleMuted
+                                        selectedColor = AppColors.TextLightBrown
                                     )
                                 )
-
                                 Text(
                                     text = season,
-                                    color = RuleText,
+                                    color = AppColors.TextBrown,
                                     fontSize = 14.sp
                                 )
                             }
@@ -1086,24 +1023,23 @@ fun AddPlaylistRuleScreen(
                             showSeasonPicker = false
                         }
                     ) {
-                        Text("cancel", color = RuleMuted)
+                        Text("cancel", color = AppColors.TextLightBrown)
                     }
                 }
             )
         }
     }
-
-
+    
     if (showExitConfirmation) {
         AlertDialog(
             onDismissRequest = {
                 showExitConfirmation = false
             },
-            containerColor = RuleBackground,
+            containerColor = AppColors.GradientStart,
             title = {
                 Text(
                     text = "discard changes?",
-                    color = RuleText,
+                    color = AppColors.TextBrown,
                     fontWeight = FontWeight.SemiBold
                 )
             },
@@ -1114,7 +1050,7 @@ fun AddPlaylistRuleScreen(
                     } else {
                         "are you sure you want to exit? your changes to this rule won't be saved."
                     },
-                    color = RuleMuted
+                    color = AppColors.TextLightBrown
                 )
             },
             confirmButton = {
@@ -1126,7 +1062,7 @@ fun AddPlaylistRuleScreen(
                 ) {
                     Text(
                         text = "discard",
-                        color = Color(0xFFB34736)
+                        color = AppColors.Red
                     )
                 }
             },
@@ -1138,22 +1074,21 @@ fun AddPlaylistRuleScreen(
                 ) {
                     Text(
                         text = "keep editing",
-                        color = RuleText
+                        color = AppColors.TextBrown
                     )
                 }
             }
         )
     }
 
-
     if (showPlaylistPicker) {
         AlertDialog(
             onDismissRequest = { showPlaylistPicker = false },
-            containerColor = RuleBackground,
+            containerColor = AppColors.GradientStart,
             title = {
                 Text(
                     text = "choose a playlist",
-                    color = RuleText,
+                    color = AppColors.TextBrown,
                     fontWeight = FontWeight.SemiBold
                 )
             },
@@ -1161,7 +1096,7 @@ fun AddPlaylistRuleScreen(
                 if (playlists.isEmpty()) {
                     Text(
                         text = "loading your spotify playlists...",
-                        color = RuleMuted,
+                        color = AppColors.TextLightBrown,
                         fontSize = 14.sp
                     )
                 } else {
@@ -1203,7 +1138,7 @@ fun AddPlaylistRuleScreen(
                                 Text(
                                     text = playlist.name,
                                     modifier = Modifier.weight(1f),
-                                    color = RuleText,
+                                    color = AppColors.TextBrown,
                                     fontSize = 14.sp,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
@@ -1212,13 +1147,12 @@ fun AddPlaylistRuleScreen(
                                 if (alreadySelected) {
                                     Text(
                                         text = "added",
-                                        color = RuleMuted,
+                                        color = AppColors.TextLightBrown,
                                         fontSize = 12.sp
                                     )
                                 }
                             }
-
-                            HorizontalDivider(color = RuleBorder)
+                            HorizontalDivider(color = AppColors.FadedBrown)
                         }
                     }
                 }
@@ -1227,7 +1161,7 @@ fun AddPlaylistRuleScreen(
                 TextButton(
                     onClick = { showPlaylistPicker = false }
                 ) {
-                    Text("cancel", color = RuleMuted)
+                    Text("cancel", color = AppColors.TextLightBrown)
                 }
             }
         )
@@ -1249,8 +1183,7 @@ private fun PlaylistCover(
         } else {
             withContext(Dispatchers.IO) {
                 try {
-                    val connection = URL(imageUrl)
-                        .openConnection() as HttpURLConnection
+                    val connection = URL(imageUrl).openConnection() as HttpURLConnection
 
                     connection.connectTimeout = 8000
                     connection.readTimeout = 8000
@@ -1272,7 +1205,7 @@ private fun PlaylistCover(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFEADFD2)),
+            .background(AppColors.GradientStart),
         contentAlignment = Alignment.Center
     ) {
         if (bitmap != null) {
@@ -1285,7 +1218,7 @@ private fun PlaylistCover(
         } else {
             Text(
                 text = "♫",
-                color = RuleMuted,
+                color = AppColors.TextLightBrown,
                 fontSize = 22.sp
             )
         }
@@ -1296,14 +1229,10 @@ private fun formatTime(index: Int): String {
     val normalizedIndex = ((index % 48) + 48) % 48
     val hour = normalizedIndex / 2
     val minute = if (normalizedIndex % 2 == 0) "00" else "30"
-
     return "%02d:%s".format(hour, minute)
 }
 
-private fun hasSameRuleConditions(
-    first: PlaylistRule,
-    second: PlaylistRule
-): Boolean {
+private fun hasSameRuleConditions(first: PlaylistRule, second: PlaylistRule): Boolean {
     if (first.triggerOption != second.triggerOption) {
         return false
     }
@@ -1317,24 +1246,13 @@ private fun hasSameRuleConditions(
     val sameTimeRanges =
         first.timeRanges.toSet() == second.timeRanges.toSet()
 
-    return first.rainEnabled == second.rainEnabled &&
-            first.rainScope == second.rainScope &&
-            when (first.triggerOption) {
-                "season only" ->
-                    (first.rainEnabled && first.rainScope == "all") ||
-                            sameSeason
-
-                "time only" ->
-                    sameTimeRanges
-
-                "season and time" ->
-                    ((first.rainEnabled && first.rainScope == "all") ||
-                            sameSeason) && sameTimeRanges
-
-                else -> false
-            }
+    return first.rainEnabled == second.rainEnabled && first.rainScope == second.rainScope && when (first.triggerOption) {
+        "season only" -> (first.rainEnabled && first.rainScope == "all") || sameSeason
+        "time only" -> sameTimeRanges
+        "season and time" -> ((first.rainEnabled && first.rainScope == "all") || sameSeason) && sameTimeRanges
+        else -> false
+    }
 }
-
 
 @Composable
 private fun TimeWheel(
@@ -1345,10 +1263,7 @@ private fun TimeWheel(
     val itemHeight = 38.dp
     val totalItems = 48 * 100
     val middleCycle = 48 * 50
-
-    // Start with the selected time in the center of the wheel.
     val initialItem = middleCycle + selectedIndex
-
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = initialItem - 2
     )
@@ -1356,18 +1271,12 @@ private fun TimeWheel(
     LaunchedEffect(isScrolling) { onScrollStateChange(isScrolling) }
     val coroutineScope = rememberCoroutineScope()
 
-    // The selected time is the item closest to the viewport center.
     LaunchedEffect(listState.isScrollInProgress) {
         if (!listState.isScrollInProgress) {
             val layoutInfo = listState.layoutInfo
-            val viewportCenter =
-                (layoutInfo.viewportStartOffset +
-                        layoutInfo.viewportEndOffset) / 2
-
+            val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
             val centeredItem = layoutInfo.visibleItemsInfo.minByOrNull {
-                abs(
-                    (it.offset + it.size / 2) - viewportCenter
-                )
+                abs((it.offset + it.size / 2) - viewportCenter)
             }
 
             if (centeredItem != null) {
@@ -1388,26 +1297,15 @@ private fun TimeWheel(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            flingBehavior = rememberSnapFlingBehavior(
-                lazyListState = listState
-            )
+            flingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
         ) {
             items(totalItems) { index ->
                 val timeIndex = index % 48
-
                 val layoutInfo = listState.layoutInfo
-                val viewportCenter =
-                    (layoutInfo.viewportStartOffset +
-                            layoutInfo.viewportEndOffset) / 2
-
-                val itemInfo = layoutInfo.visibleItemsInfo
-                    .firstOrNull { it.index == index }
-
+                val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+                val itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
                 val distanceFromCenter = if (itemInfo != null) {
-                    abs(
-                        (itemInfo.offset + itemInfo.size / 2) -
-                                viewportCenter
-                    ).toFloat() / itemHeight.value.coerceAtLeast(1f)
+                    abs((itemInfo.offset + itemInfo.size / 2) - viewportCenter).toFloat() / itemHeight.value.coerceAtLeast(1f)
                 } else {
                     2f
                 }
@@ -1440,7 +1338,7 @@ private fun TimeWheel(
                         modifier = Modifier.graphicsLayer {
                             alpha = itemAlpha
                         },
-                        color = RuleText,
+                        color = AppColors.TextBrown,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Normal
                     )
@@ -1448,19 +1346,18 @@ private fun TimeWheel(
             }
         }
 
-        // Fixed center selection highlight, drawn above the scrolling list.
         if (!isScrolling) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(itemHeight)
                     .align(Alignment.Center)
-                    .background(RuleMuted),
+                    .background(AppColors.TextLightBrown),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = formatTime(selectedIndex),
-                    color = RuleBackground,
+                    color = AppColors.GradientStart,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
