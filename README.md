@@ -21,7 +21,7 @@ By integrating the Spotify Web API, Spotify Android SDK, and WeatherAPI, cloudbe
 |---|---|
 | Android Development | Kotlin, Jetpack Compose |
 | Android Platform | Android SDK |
-| Music Integration | Spotify Web API, Spotify Android SDK |
+| Music Integration | Spotify Web API, Spotify Authentication SDK, Spotify App Remote SDK |
 | Backend | Python, FastAPI |
 | HTTP Requests | HTTPX |
 | Database | Supabase PostgreSQL |
@@ -35,7 +35,8 @@ By integrating the Spotify Web API, Spotify Android SDK, and WeatherAPI, cloudbe
 | Service | Purpose |
 |---|---|
 | Spotify Web API | Retrieve playlists, verify user accounts, and interact with Spotify |
-| Spotify Android SDK | Authentication and App Remote playback integration |
+| Spotify Authentication SDK | Spotify authorization flow |
+| Spotify App Remote SDK | Spotify playback integration |
 | WeatherAPI | Retrieve current weather conditions |
 | FastAPI | Backend API and integration layer |
 | Render | Backend hosting |
@@ -161,7 +162,7 @@ Keep your `.env` file private. Never commit API keys, database credentials, or t
 
 1. Clone this repository and open it in Android Studio.
 2. Allow Gradle to sync and install the required dependencies.
-3. Configure your Spotify Client ID in the Android application.
+3. Set your Spotify Client ID in the `clientId` property in `MainActivity.kt`.
 4. Configure the backend URL to point to your running backend.
 5. Build and run the application on an Android device.
 
