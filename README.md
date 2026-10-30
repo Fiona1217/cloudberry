@@ -214,7 +214,6 @@ The project uses this local file as a Gradle dependency. The SDK binary is exclu
 - This project is not affiliated with or endorsed by Spotify.
 
 ## App Preview
-
 ### Home Screen
 Displays the home screen, including the rotating vinyl while music is playing.
 <div align="center">
@@ -222,11 +221,13 @@ Displays the home screen, including the rotating vinyl while music is playing.
 https://github.com/user-attachments/assets/84fe090a-950d-4b4d-8e60-ab6013c1fb7a
 
 </div>
+
 ### Settings
 Shows the app settings, including weather configuration.
 <div align="center">
     <img height="400" alt="settings" src="https://github.com/user-attachments/assets/7ec6790d-2e11-4a2f-ba19-85244c3166c4" />
 </div>
+
 ### Rule List
 Demonstrates viewing, expanding, and collapsing saved playlist rules.
 <div align="center">
@@ -234,6 +235,7 @@ Demonstrates viewing, expanding, and collapsing saved playlist rules.
 https://github.com/user-attachments/assets/bd848a51-f7a9-4c72-a225-139a77c80ed6
 
 </div>
+
 ### Playlist Sorting
 Demonstrates configuring playlist order and shuffle options when creating a rule.
 <div align="center">
@@ -241,6 +243,7 @@ Demonstrates configuring playlist order and shuffle options when creating a rule
 https://github.com/user-attachments/assets/649b76df-2bfd-4798-9f49-746369b9732d
 
 </div>
+
 ### Adding a Rule
 Demonstrates creating a new playlist rule and viewing it in the rule list.
 <div align="center">
