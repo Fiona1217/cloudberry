@@ -206,7 +206,7 @@ The Spotify Client Secret must remain on the backend and must never be included 
 ### Home Screen
 Displays the home screen, including the rotating vinyl while music is playing.
 
-[▶ Watch Home Screen Demo](https://file.garden/auQiZREf5w77UCAT/homescreen.mp4)
+https://github.com/user-attachments/assets/84fe090a-950d-4b4d-8e60-ab6013c1fb7a
 
 ### Settings
 Shows the app settings, including weather configuration.
@@ -216,17 +216,17 @@ Shows the app settings, including weather configuration.
 ### Rule List
 Demonstrates viewing, expanding, and collapsing saved playlist rules.
 
-[▶ Watch Rule List Demo](https://file.garden/auQiZREf5w77UCAT/rule_list1.mp4)
+https://github.com/user-attachments/assets/bd848a51-f7a9-4c72-a225-139a77c80ed6
 
 ### Playlist Sorting
 Demonstrates configuring playlist order and shuffle options when creating a rule.
 
-[▶ Watch Playlist Sorting Demo](https://file.garden/auQiZREf5w77UCAT/sort_playlist1.mp4)
+https://github.com/user-attachments/assets/649b76df-2bfd-4798-9f49-746369b9732d
 
 ### Adding a Rule
 Demonstrates creating a new playlist rule and viewing it in the rule list.
 
-[▶ Watch Add Rule Demo](https://file.garden/auQiZREf5w77UCAT/add_rule1.mp4)
+https://github.com/user-attachments/assets/bf007b69-50bc-4e43-af67-558a0144fc8b
 
 ## Design Decisions
 
