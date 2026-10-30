@@ -251,6 +251,7 @@ Demonstrates creating a new playlist rule and viewing it in the rule list.
 https://github.com/user-attachments/assets/bf007b69-50bc-4e43-af67-558a0144fc8b
 
 </div>
+
 ## Design Decisions
 
 - **User-defined rules:** Users choose their own time periods, seasons, playlists, and rule priorities.
